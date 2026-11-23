@@ -33,8 +33,8 @@
 
         <div class="sidebar-scroll">
           <div class="sidebar-group">
-            <div class="sidebar-label">Категории</div>
-            <nav class="nav-list" aria-label="Категории звуков">
+            <div class="sidebar-label" data-i18n="sidebar.categories">Категории</div>
+            <nav class="nav-list" aria-label="Categories">
               <button type="button" class="nav-item" data-query="">
                 <span class="nav-icon">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
@@ -44,7 +44,7 @@
                     <rect x="14" y="14" width="7" height="7" rx="1.5" />
                   </svg>
                 </span>
-                <span class="nav-text">Все звуки</span>
+                <span class="nav-text" data-i18n="cat.all">Все звуки</span>
               </button>
               <button type="button" class="nav-item active" data-query="whoosh">
                 <span class="nav-icon">
@@ -54,7 +54,7 @@
                     <path d="M12.6 19.4A2 2 0 1 0 14 16H2" />
                   </svg>
                 </span>
-                <span class="nav-text">Вуши и переходы</span>
+                <span class="nav-text" data-i18n="cat.whoosh">Вуши и переходы</span>
               </button>
               <button type="button" class="nav-item" data-query="impact">
                 <span class="nav-icon">
@@ -62,7 +62,7 @@
                     <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
                   </svg>
                 </span>
-                <span class="nav-text">Удары и акценты</span>
+                <span class="nav-text" data-i18n="cat.impact">Удары и акценты</span>
               </button>
               <button type="button" class="nav-item" data-query="click">
                 <span class="nav-icon">
@@ -70,7 +70,7 @@
                     <path d="M4 4l7.07 17 2.51-7.39L21 11.07z" />
                   </svg>
                 </span>
-                <span class="nav-text">Интерфейс и клики</span>
+                <span class="nav-text" data-i18n="cat.click">Интерфейс и клики</span>
               </button>
               <button type="button" class="nav-item" data-query="riser">
                 <span class="nav-icon">
@@ -79,7 +79,7 @@
                     <polyline points="16 7 22 7 22 13" />
                   </svg>
                 </span>
-                <span class="nav-text">Райзеры</span>
+                <span class="nav-text" data-i18n="cat.riser">Райзеры</span>
               </button>
               <button type="button" class="nav-item" data-query="sub drop">
                 <span class="nav-icon">
@@ -87,30 +87,35 @@
                     <path d="M2 12h3l2-6 4 12 3-8 2 4h6" />
                   </svg>
                 </span>
-                <span class="nav-text">Саб-дропы</span>
+                <span class="nav-text" data-i18n="cat.subDrop">Саб-дропы</span>
               </button>
             </nav>
           </div>
 
           <div class="sidebar-group">
-            <div class="sidebar-label">Огибающая</div>
-            <div class="preset-grid" role="group" aria-label="Пресеты формы волны">
+            <div class="sidebar-label" data-i18n="sidebar.envelope">Огибающая</div>
+            <div class="preset-grid" role="group" aria-label="Envelope presets">
               <button type="button" class="preset-btn" data-preset="whoosh">Whoosh</button>
               <button type="button" class="preset-btn" data-preset="impact">Impact</button>
               <button type="button" class="preset-btn" data-preset="sub-drop">Sub Drop</button>
               <button type="button" class="preset-btn" data-preset="ui-click">UI Click</button>
               <button type="button" class="preset-btn" data-preset="riser">Riser</button>
-              <button type="button" id="btn-reset-envelope-sidebar" class="preset-btn preset-btn--muted">
+              <button
+                type="button"
+                id="btn-reset-envelope-sidebar"
+                class="preset-btn preset-btn--muted"
+                data-i18n="action.reset"
+              >
                 Сбросить
               </button>
             </div>
           </div>
 
           <div class="sidebar-group">
-            <div class="sidebar-label">Параметры</div>
+            <div class="sidebar-label" data-i18n="sidebar.parameters">Параметры</div>
             <div class="param-block">
               <div class="param-row">
-                <span class="param-name">Длительность</span>
+                <span class="param-name" data-i18n="param.duration">Длительность</span>
                 <span id="duration-readout" class="param-value">0.1–5.0 с</span>
               </div>
               <div class="dual-range">
@@ -124,7 +129,7 @@
                   max="10.0"
                   step="0.1"
                   value="0.1"
-                  aria-label="Минимальная длительность"
+                  aria-label="Min duration"
                 />
                 <input
                   id="max-duration"
@@ -133,14 +138,14 @@
                   max="10.0"
                   step="0.1"
                   value="5.0"
-                  aria-label="Максимальная длительность"
+                  aria-label="Max duration"
                 />
               </div>
             </div>
 
             <div class="param-block">
               <div class="param-row">
-                <span class="param-name">Громкость</span>
+                <span class="param-name" data-i18n="param.volume">Громкость</span>
                 <span id="volume-readout" class="param-value">85%</span>
               </div>
               <input
@@ -151,7 +156,7 @@
                 max="100"
                 step="1"
                 value="85"
-                aria-label="Громкость превью"
+                aria-label="Preview volume"
               />
             </div>
           </div>
@@ -179,7 +184,7 @@
                 <line x1="18" y1="16" x2="22" y2="16" />
               </svg>
             </span>
-            <span class="nav-text">Настройки</span>
+            <span class="nav-text" data-i18n="sidebar.settings">Настройки</span>
           </button>
         </footer>
       </aside>
@@ -198,10 +203,13 @@
                 autocomplete="off"
                 spellcheck="false"
                 placeholder="Поиск звуков"
+                data-i18n-placeholder="topbar.searchPlaceholder"
               />
               <kbd class="kbd">Ctrl K</kbd>
             </div>
-            <button id="btn-search" class="primary-btn" type="submit">Найти</button>
+            <button id="btn-search" class="primary-btn" type="submit" data-i18n="topbar.searchBtn">
+              Найти
+            </button>
           </form>
 
           <div class="topbar-drag-spacer" data-tauri-drag-region></div>
@@ -211,6 +219,7 @@
             class="fx-toggle-btn active"
             type="button"
             title="Показать или скрыть панель FX Rack"
+            data-i18n-title="topbar.fxRackTitle"
           >
             <span id="fx-active-dot" class="fx-dot hidden" aria-hidden="true"></span>
             <span>FX Rack</span>
@@ -222,7 +231,9 @@
               class="icon-btn"
               type="button"
               title="Свернуть"
-              aria-label="Свернуть окно"
+              aria-label="Свернуть"
+              data-i18n-title="topbar.minimize"
+              data-i18n-aria-label="topbar.minimize"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                 <line x1="6" y1="12" x2="18" y2="12" />
@@ -233,7 +244,9 @@
               class="icon-btn icon-btn--close"
               type="button"
               title="Закрыть"
-              aria-label="Закрыть окно"
+              aria-label="Закрыть"
+              data-i18n-title="topbar.close"
+              data-i18n-aria-label="topbar.close"
             >
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
                 <line x1="7" y1="7" x2="17" y2="17" />
@@ -247,17 +260,22 @@
           <section class="scope-panel">
             <div class="scope-header">
               <div class="scope-title-group">
-                <span class="scope-title">Огибающая громкости</span>
+                <span class="scope-title" data-i18n="scope.title">Огибающая громкости</span>
                 <span id="envelope-state-label" class="scope-state">Не задана</span>
               </div>
-              <button type="button" id="btn-reset-envelope" class="reset-link hidden">
+              <button
+                type="button"
+                id="btn-reset-envelope"
+                class="reset-link hidden"
+                data-i18n="action.reset"
+              >
                 Сбросить
               </button>
             </div>
 
             <div class="canvas-well">
               <canvas id="envelope-canvas"></canvas>
-              <div id="envelope-hint" class="envelope-hint">
+              <div id="envelope-hint" class="envelope-hint" data-i18n="scope.hint">
                 Нарисуйте кривую громкости
               </div>
             </div>
@@ -267,8 +285,14 @@
             <div class="results-header">
               <div id="results-summary" class="results-summary">Готов к поиску</div>
               <div class="results-shortcuts">
-                <span class="shortcut-item"><kbd class="kbd">Space</kbd> Прослушать</span>
-                <span class="shortcut-item"><kbd class="kbd">Drag</kbd> WAV в DAW</span>
+                <span class="shortcut-item">
+                  <kbd class="kbd">Space</kbd>
+                  <span data-i18n="results.shortcutPlay">Прослушать</span>
+                </span>
+                <span class="shortcut-item">
+                  <kbd class="kbd">Drag</kbd>
+                  <span data-i18n="results.shortcutDrag">WAV в DAW</span>
+                </span>
               </div>
             </div>
 
@@ -284,13 +308,15 @@
             <span class="fx-title">FX Rack</span>
             <span id="fx-active-sound" class="fx-subtitle">Выберите звук</span>
           </div>
-          <button id="btn-fx-reset" class="reset-link" type="button">Сброс</button>
+          <button id="btn-fx-reset" class="reset-link" type="button" data-i18n="action.reset">
+            Сброс
+          </button>
         </div>
 
         <div class="fx-scroll">
           <div class="fx-section">
-            <div class="fx-section-label">Пресеты FX</div>
-            <div class="fx-preset-grid" role="group" aria-label="Пресеты эффектов">
+            <div class="fx-section-label" data-i18n="fx.presetsLabel">Пресеты FX</div>
+            <div class="fx-preset-grid" role="group" aria-label="FX Presets">
               <button type="button" class="fx-preset-btn active" data-fx-preset="clean">
                 Clean (Reset)
               </button>
@@ -313,7 +339,7 @@
           </div>
 
           <div class="fx-section">
-            <div class="fx-section-label">Время и тон</div>
+            <div class="fx-section-label" data-i18n="fx.sectionTime">Время и тон</div>
 
             <div class="fx-control">
               <div class="fx-control-row">
@@ -340,7 +366,7 @@
           </div>
 
           <div class="fx-section">
-            <div class="fx-section-label">Пространство (Freeverb)</div>
+            <div class="fx-section-label" data-i18n="fx.sectionSpace">Пространство (Freeverb)</div>
 
             <div class="fx-control">
               <div class="fx-control-row">
@@ -395,7 +421,7 @@
           </div>
 
           <div class="fx-section">
-            <div class="fx-section-label">Фильтры и сатурация</div>
+            <div class="fx-section-label" data-i18n="fx.sectionFilters">Фильтры и сатурация</div>
 
             <div class="fx-control">
               <div class="fx-control-row">
@@ -450,7 +476,7 @@
           </div>
 
           <div class="fx-section">
-            <div class="fx-section-label">Огибающая и уровень</div>
+            <div class="fx-section-label" data-i18n="fx.sectionLevel">Огибающая и уровень</div>
 
             <div class="fx-control">
               <div class="fx-control-row">
@@ -495,10 +521,15 @@
         </div>
 
         <footer class="fx-footer">
-          <button id="btn-fx-preview" class="primary-btn fx-preview-btn" type="button">
+          <button
+            id="btn-fx-preview"
+            class="primary-btn fx-preview-btn"
+            type="button"
+            data-i18n="fx.previewBtn"
+          >
             Прослушать с FX
           </button>
-          <span class="fx-tip">Двойной клик по слайдеру — сброс</span>
+          <span class="fx-tip" data-i18n="fx.tip">Двойной клик по слайдеру — сброс</span>
         </footer>
       </aside>
     </div>
@@ -512,8 +543,14 @@
     >
       <div class="studio-modal">
         <div class="modal-header">
-          <h2 id="settings-title">Настройки источников и кэша</h2>
-          <button id="btn-close-settings" class="icon-btn" type="button" aria-label="Закрыть настройки">
+          <h2 id="settings-title" data-i18n="settings.title">Настройки источников и кэша</h2>
+          <button
+            id="btn-close-settings"
+            class="icon-btn"
+            type="button"
+            aria-label="Закрыть настройки"
+            data-i18n-aria-label="settings.closeAria"
+          >
             <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
               <line x1="7" y1="7" x2="17" y2="17" />
               <line x1="17" y1="7" x2="7" y2="17" />
@@ -523,16 +560,33 @@
 
         <div class="modal-body">
           <div class="field">
-            <label for="input-provider-mode">Источник звуков</label>
-            <select id="input-provider-mode" class="studio-select">
-              <option value="auto">Авто (Freesound при наличии ключа, иначе Mixkit)</option>
-              <option value="freesound">Только Freesound API v2</option>
-              <option value="mixkit">Только Mixkit (без API-ключа)</option>
+            <label for="input-language" data-i18n="settings.language">Язык интерфейса</label>
+            <select id="input-language" class="studio-select">
+              <option value="en">EN — English</option>
+              <option value="ru">RU — Русский</option>
+              <option value="es">ES — Español</option>
+              <option value="pt-BR">pt-BR — Português (Brasil)</option>
+              <option value="zh-CN">zh-CN — 简体中文</option>
             </select>
           </div>
 
           <div class="field">
-            <label for="input-api-key">Freesound API Key</label>
+            <label for="input-provider-mode" data-i18n="settings.sourceLabel">Источник звуков</label>
+            <select id="input-provider-mode" class="studio-select">
+              <option value="auto" data-i18n="settings.sourceAuto">
+                Авто (Freesound при наличии ключа, иначе Mixkit)
+              </option>
+              <option value="freesound" data-i18n="settings.sourceFreesound">
+                Только Freesound API v2
+              </option>
+              <option value="mixkit" data-i18n="settings.sourceMixkit">
+                Только Mixkit (без API-ключа)
+              </option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="input-api-key" data-i18n="settings.apiKeyLabel">Freesound API Key</label>
             <div class="key-input-row">
               <input
                 id="input-api-key"
@@ -540,26 +594,37 @@
                 autocomplete="off"
                 spellcheck="false"
                 placeholder="Вставьте токен Freesound v2"
+                data-i18n-placeholder="settings.apiKeyPlaceholder"
               />
-              <button id="btn-toggle-key" class="ghost-btn" type="button">Показать</button>
+              <button id="btn-toggle-key" class="ghost-btn" type="button" data-i18n="settings.show">
+                Показать
+              </button>
             </div>
-            <p class="field-note">
+            <p class="field-note" data-i18n="settings.apiNote">
               Ключ хранится локально в SQLite. Без ключа используется встроенный парсер Mixkit.
             </p>
           </div>
 
           <div class="cache-box">
             <div class="cache-meta">
-              <span class="cache-title">Локальный кэш и временные WAV</span>
+              <span class="cache-title" data-i18n="settings.cacheTitle">
+                Локальный кэш и временные WAV
+              </span>
               <span id="cache-stats-text" class="cache-stats">Загрузка</span>
             </div>
-            <button id="btn-clear-cache" class="ghost-btn" type="button">Очистить кэш</button>
+            <button id="btn-clear-cache" class="ghost-btn" type="button" data-i18n="settings.clearCache">
+              Очистить кэш
+            </button>
           </div>
         </div>
 
         <div class="modal-footer">
-          <button id="btn-cancel-settings" class="ghost-btn" type="button">Отмена</button>
-          <button id="btn-save-settings" class="primary-btn" type="button">Сохранить</button>
+          <button id="btn-cancel-settings" class="ghost-btn" type="button" data-i18n="settings.cancel">
+            Отмена
+          </button>
+          <button id="btn-save-settings" class="primary-btn" type="button" data-i18n="settings.save">
+            Сохранить
+          </button>
         </div>
       </div>
     </div>

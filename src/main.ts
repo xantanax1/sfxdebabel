@@ -1,5 +1,11 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { getCurrentWindow } from "@tauri-apps/api/window";
+import {
+  applyDomTranslations,
+  normalizeLocale,
+  t,
+  type Locale,
+} from "./i18n";
 
 const ENVELOPE_POINTS = 64;
 
@@ -8,6 +14,7 @@ type ProviderMode = "auto" | "freesound" | "mixkit";
 interface AppSettings {
   freesoundApiKey: string;
   providerMode: ProviderMode;
+  language: Locale;
 }
 
 interface CacheStats {
@@ -88,6 +95,11 @@ let lastDrawVal = 0;
 
 let currentItems: SfxItem[] = [];
 let currentProvider = "Mixkit";
+let currentLocale: Locale = "ru";
+let savedLocale: Locale = "ru";
+let lastSummaryMode: "ready" | "searching" | "results" | "error" = "ready";
+let lastCacheEntryCount = 0;
+let lastCacheStats: CacheStats | null = null;
 let activeSearchQuery = "whoosh";
 let nextCursor: string | null = null;
 let isLoadingMore = false;
@@ -202,6 +214,7 @@ const openSettingsBtn = document.getElementById("btn-open-settings") as HTMLButt
 const closeSettingsBtn = document.getElementById("btn-close-settings") as HTMLButtonElement;
 const cancelSettingsBtn = document.getElementById("btn-cancel-settings") as HTMLButtonElement;
 const saveSettingsBtn = document.getElementById("btn-save-settings") as HTMLButtonElement;
+const languageSelect = document.getElementById("input-language") as HTMLSelectElement;
 const providerModeSelect = document.getElementById("input-provider-mode") as HTMLSelectElement;
 const apiKeyInput = document.getElementById("input-api-key") as HTMLInputElement;
 const toggleKeyBtn = document.getElementById("btn-toggle-key") as HTMLButtonElement;
@@ -223,14 +236,15 @@ function showToast(message: string): void {
 }
 
 function formatDuration(secs: number): string {
-  if (!Number.isFinite(secs) || secs < 0) return "0.00 с";
-  return `${secs.toFixed(2)} с`;
+  const unit = t(currentLocale, "unit.sec");
+  if (!Number.isFinite(secs) || secs < 0) return `0.00 ${unit}`;
+  return `${secs.toFixed(2)} ${unit}`;
 }
 
 function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} Б`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} КБ`;
-  return `${(bytes / (1024 * 1024)).toFixed(2)} МБ`;
+  if (bytes < 1024) return `${bytes} ${t(currentLocale, "unit.b")}`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} ${t(currentLocale, "unit.kb")}`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} ${t(currentLocale, "unit.mb")}`;
 }
 
 function sliderToHz(sliderVal: number, minHz: number, maxHz: number): number {
@@ -498,13 +512,17 @@ function renderEnvelopeCanvas(): void {
   if (!userEnvelope) {
     envelopeHint.classList.remove("hidden");
     resetEnvelopeBtn.classList.add("hidden");
-    envelopeStateLabel.textContent = activeItem ? `Эталон: ${activeItem.title}` : "Не задана";
+    envelopeStateLabel.textContent = activeItem
+      ? t(currentLocale, "scope.ref", { name: activeItem.title })
+      : t(currentLocale, "scope.notSet");
     return;
   }
 
   envelopeHint.classList.add("hidden");
   resetEnvelopeBtn.classList.remove("hidden");
-  envelopeStateLabel.textContent = activePreset ? `Пресет: ${activePreset}` : "64 точки";
+  envelopeStateLabel.textContent = activePreset
+    ? t(currentLocale, "scope.preset", { name: activePreset })
+    : t(currentLocale, "scope.points64");
 
   const pts = userEnvelope.map((v, idx) => ({
     x: padLeft + (idx / (ENVELOPE_POINTS - 1)) * plotW,
@@ -692,7 +710,7 @@ function syncDurationSlider(changed: "min" | "max"): void {
   const rightPct = ((maxVal - 0.1) / 9.9) * 100;
   durFill.style.left = `${leftPct}%`;
   durFill.style.width = `${Math.max(0, rightPct - leftPct)}%`;
-  durReadout.textContent = `${minVal.toFixed(1)}–${maxVal.toFixed(1)} с`;
+  durReadout.textContent = `${minVal.toFixed(1)}–${maxVal.toFixed(1)} ${t(currentLocale, "unit.sec")}`;
 }
 
 minDurInput.addEventListener("input", () => syncDurationSlider("min"));
@@ -781,7 +799,7 @@ function selectSoundForFx(soundId: string): void {
 
   selectedSoundId = soundId;
   const item = currentItems.find((x) => x.id === soundId);
-  fxActiveSound.textContent = item ? item.title : "Выберите звук";
+  fxActiveSound.textContent = item ? item.title : t(currentLocale, "fx.selectSound");
 
   resultsList.querySelectorAll<HTMLElement>(".sfx-card").forEach((el) => {
     el.classList.toggle("is-selected", el.dataset.soundId === soundId);
@@ -957,7 +975,7 @@ async function togglePlay(item: SfxItem, startSecs?: number): Promise<void> {
       updatePlaybackUi();
       renderEnvelopeCanvas();
     } catch (err) {
-      showToast(`Ошибка остановки: ${String(err)}`);
+      showToast(t(currentLocale, "toast.stopErr", { err: String(err) }));
     }
     return;
   }
@@ -1082,7 +1100,7 @@ function attachCardDragBehavior(card: HTMLElement, item: SfxItem): void {
         onEvent.onmessage = (payload: unknown) => {
           const res = payload as { result?: string };
           if (res?.result === "Dropped") {
-            showToast(`Экспортировано: ${item.title}.wav`);
+            showToast(t(currentLocale, "toast.exported", { title: item.title }));
           }
         };
 
@@ -1093,7 +1111,7 @@ function attachCardDragBehavior(card: HTMLElement, item: SfxItem): void {
           onEvent,
         });
       } catch (err) {
-        showToast(`Ошибка drag-and-drop: ${String(err)}`);
+        showToast(t(currentLocale, "toast.dragErr", { err: String(err) }));
       }
     };
 
@@ -1117,7 +1135,7 @@ function createSfxCardElement(item: SfxItem): HTMLElement {
   const playBtn = document.createElement("button");
   playBtn.type = "button";
   playBtn.className = "play-btn";
-  playBtn.title = "Воспроизвести / Остановить";
+  playBtn.title = t(currentLocale, "card.playTitle");
   playBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="8,5 19,12 8,19"/></svg>`;
   playBtn.addEventListener("click", (e) => {
     e.stopPropagation();
@@ -1150,7 +1168,7 @@ function createSfxCardElement(item: SfxItem): HTMLElement {
 
   const waveWrap = document.createElement("div");
   waveWrap.className = "wave-wrap";
-  waveWrap.title = "Клик для перемотки";
+  waveWrap.title = t(currentLocale, "card.seekTitle");
   const waveCanvas = document.createElement("canvas");
   waveCanvas.className = "wave-canvas";
   waveWrap.appendChild(waveCanvas);
@@ -1170,7 +1188,7 @@ function createSfxCardElement(item: SfxItem): HTMLElement {
     const badge = document.createElement("span");
     badge.className = `match-badge${item.matchScore >= 80 ? " high" : ""}`;
     badge.textContent = `${item.matchScore.toFixed(0)}%`;
-    badge.title = "Совпадение с огибающей";
+    badge.title = t(currentLocale, "card.matchTitle");
     actions.appendChild(badge);
   }
 
@@ -1178,13 +1196,13 @@ function createSfxCardElement(item: SfxItem): HTMLElement {
   wavBtn.type = "button";
   wavBtn.className = "wav-btn";
   wavBtn.textContent = "WAV";
-  wavBtn.title = "Экспортировать 24-bit WAV с текущими FX";
+  wavBtn.title = t(currentLocale, "card.wavTitle");
   wavBtn.addEventListener("click", async (e) => {
     e.stopPropagation();
     selectSoundForFx(item.id);
     try {
       const path = await getOrPrepareWav(item);
-      showToast(`WAV сохранён: ${path}`);
+      showToast(t(currentLocale, "toast.wavSaved", { path }));
     } catch (err) {
       showToast(String(err));
     }
@@ -1206,7 +1224,7 @@ function updateScrollSentinel(errorMsg?: string): void {
 
   if (isLoadingMore) {
     const span = document.createElement("span");
-    span.textContent = "Загрузка следующих звуков…";
+    span.textContent = t(currentLocale, "results.loadingMore");
     scrollSentinel.appendChild(span);
     return;
   }
@@ -1217,7 +1235,7 @@ function updateScrollSentinel(errorMsg?: string): void {
     const retryBtn = document.createElement("button");
     retryBtn.type = "button";
     retryBtn.className = "load-more-btn";
-    retryBtn.textContent = "Повторить";
+    retryBtn.textContent = t(currentLocale, "results.retry");
     retryBtn.addEventListener("click", () => void loadNextPage());
     scrollSentinel.append(span, retryBtn);
     return;
@@ -1227,23 +1245,40 @@ function updateScrollSentinel(errorMsg?: string): void {
     const btn = document.createElement("button");
     btn.type = "button";
     btn.className = "load-more-btn";
-    btn.textContent = "Загрузить ещё";
+    btn.textContent = t(currentLocale, "results.loadMore");
     btn.addEventListener("click", () => void loadNextPage());
     scrollSentinel.appendChild(btn);
   } else {
     const span = document.createElement("span");
-    span.textContent = "Показаны все найденные звуки";
+    span.textContent = t(currentLocale, "results.allShown");
     scrollSentinel.appendChild(span);
   }
 }
 
 function updateResultsSummary(): void {
+  if (lastSummaryMode === "ready") {
+    resultsSummary.textContent = t(currentLocale, "results.ready");
+    return;
+  }
+  if (lastSummaryMode === "searching") {
+    resultsSummary.textContent = t(currentLocale, "results.searching");
+    return;
+  }
+  if (lastSummaryMode === "error") {
+    resultsSummary.textContent = t(currentLocale, "results.searchError");
+    return;
+  }
   if (currentItems.length === 0) {
-    resultsSummary.textContent = `Нет результатов · ${currentProvider}`;
+    resultsSummary.textContent = t(currentLocale, "results.noneProvider", {
+      provider: currentProvider,
+    });
     return;
   }
   const sources = Array.from(loadedProviders).join(" + ") || currentProvider;
-  resultsSummary.textContent = `Загружено ${currentItems.length} · ${sources}`;
+  resultsSummary.textContent = t(currentLocale, "results.loaded", {
+    count: currentItems.length,
+    sources,
+  });
 }
 
 function renderResultsList(): void {
@@ -1253,10 +1288,10 @@ function renderResultsList(): void {
   if (currentItems.length === 0) {
     const empty = document.createElement("div");
     empty.className = "state-card";
-    empty.innerHTML = `
-      <strong>Звуки не найдены</strong>
-      Выберите другую категорию слева или расширьте диапазон длительности
-    `;
+    const strong = document.createElement("strong");
+    strong.textContent = t(currentLocale, "results.emptyTitle");
+    const desc = document.createTextNode(t(currentLocale, "results.emptyDesc"));
+    empty.append(strong, desc);
     resultsList.appendChild(empty);
     return;
   }
@@ -1291,7 +1326,11 @@ async function refreshFooterMeta(): Promise<void> {
       settings.providerMode === "mixkit" || !settings.freesoundApiKey.trim()
         ? "Mixkit"
         : "Freesound";
-    sidebarCacheCount.textContent = `${stats.entryCount} в кэше`;
+    lastCacheEntryCount = stats.entryCount;
+    lastCacheStats = stats;
+    sidebarCacheCount.textContent = t(currentLocale, "sidebar.cacheCount", {
+      count: stats.entryCount,
+    });
   } catch {
     // Non-fatal
   }
@@ -1311,7 +1350,8 @@ async function runSearch(queryOverride?: string): Promise<void> {
 
   searchBtn.disabled = true;
   warningBanner.classList.add("hidden");
-  resultsSummary.textContent = "Поиск и расчёт RMS";
+  lastSummaryMode = "searching";
+  updateResultsSummary();
   renderLoadingSkeletons();
 
   try {
@@ -1350,7 +1390,7 @@ async function runSearch(queryOverride?: string): Promise<void> {
       fxActiveSound.textContent = currentItems[0].title;
     } else {
       selectedSoundId = null;
-      fxActiveSound.textContent = "Выберите звук";
+      fxActiveSound.textContent = t(currentLocale, "fx.selectSound");
     }
 
     if (resp.warning) {
@@ -1358,6 +1398,7 @@ async function runSearch(queryOverride?: string): Promise<void> {
       warningBanner.classList.remove("hidden");
     }
 
+    lastSummaryMode = "results";
     updateResultsSummary();
     renderResultsList();
 
@@ -1377,13 +1418,17 @@ async function runSearch(queryOverride?: string): Promise<void> {
     currentItems = [];
     selectedSoundId = null;
     nextCursor = null;
-    fxActiveSound.textContent = "Выберите звук";
+    fxActiveSound.textContent = t(currentLocale, "fx.selectSound");
     resultsList.innerHTML = "";
     const errCard = document.createElement("div");
     errCard.className = "state-card";
-    errCard.innerHTML = `<strong>Не удалось выполнить поиск</strong>${String(err)}`;
+    const strong = document.createElement("strong");
+    strong.textContent = t(currentLocale, "results.errorTitle");
+    const errText = document.createTextNode(String(err));
+    errCard.append(strong, errText);
     resultsList.appendChild(errCard);
-    resultsSummary.textContent = "Ошибка поиска";
+    lastSummaryMode = "error";
+    updateResultsSummary();
   } finally {
     if (token === lastSearchToken) {
       searchBtn.disabled = false;
@@ -1492,7 +1537,7 @@ fxResetBtn.addEventListener("click", () => applyFxPreset("clean"));
 fxPreviewBtn.addEventListener("click", () => {
   const targetId = selectedSoundId ?? currentItems[0]?.id;
   if (!targetId) {
-    showToast("Сначала найдите или выберите звук");
+    showToast(t(currentLocale, "fx.noSoundToast"));
     return;
   }
   const item = currentItems.find((x) => x.id === targetId);
@@ -1523,14 +1568,80 @@ fxSliders.forEach((slider) => {
   });
 });
 
+function renderCacheStatsText(): void {
+  if (!lastCacheStats) {
+    cacheStatsText.textContent = t(currentLocale, "settings.loading");
+    return;
+  }
+  cacheStatsText.textContent = t(currentLocale, "settings.cacheStats", {
+    entries: lastCacheStats.entryCount,
+    size: formatBytes(lastCacheStats.dbSizeBytes),
+    wavs: lastCacheStats.tempWavCount,
+  });
+}
+
+function setLocale(locale: Locale): void {
+  currentLocale = locale;
+  applyDomTranslations(locale);
+
+  syncDurationSlider("min");
+  renderEnvelopeCanvas();
+  updateResultsSummary();
+  updateScrollSentinel();
+
+  const selectedItem = selectedSoundId
+    ? currentItems.find((x) => x.id === selectedSoundId)
+    : undefined;
+  fxActiveSound.textContent = selectedItem
+    ? selectedItem.title
+    : t(currentLocale, "fx.selectSound");
+
+  sidebarCacheCount.textContent = t(currentLocale, "sidebar.cacheCount", {
+    count: lastCacheEntryCount,
+  });
+  toggleKeyBtn.textContent = t(
+    currentLocale,
+    apiKeyInput.type === "password" ? "settings.show" : "settings.hide"
+  );
+  renderCacheStatsText();
+
+  // Refresh dynamic labels inside already-rendered sound cards
+  resultsList.querySelectorAll<HTMLElement>(".sfx-card").forEach((card) => {
+    const id = card.dataset.soundId ?? "";
+    const item = currentItems.find((x) => x.id === id);
+    if (!item) return;
+
+    const durEl = card.querySelector<HTMLElement>(".sfx-duration");
+    if (durEl) durEl.textContent = formatDuration(item.duration);
+
+    const playBtn = card.querySelector<HTMLButtonElement>(".play-btn");
+    if (playBtn) playBtn.title = t(currentLocale, "card.playTitle");
+
+    const waveWrap = card.querySelector<HTMLElement>(".wave-wrap");
+    if (waveWrap) waveWrap.title = t(currentLocale, "card.seekTitle");
+
+    const badge = card.querySelector<HTMLElement>(".match-badge");
+    if (badge) badge.title = t(currentLocale, "card.matchTitle");
+
+    const wavBtn = card.querySelector<HTMLButtonElement>(".wav-btn");
+    if (wavBtn) wavBtn.title = t(currentLocale, "card.wavTitle");
+  });
+
+  if (currentItems.length === 0 && lastSummaryMode === "results") {
+    renderResultsList();
+  }
+}
+
 // Settings modal logic
 async function refreshCacheStats(): Promise<void> {
   try {
     const stats = await invoke<CacheStats>("get_cache_stats");
-    cacheStatsText.textContent = `${stats.entryCount} треков (${formatBytes(
-      stats.dbSizeBytes
-    )}) · ${stats.tempWavCount} WAV`;
-    sidebarCacheCount.textContent = `${stats.entryCount} в кэше`;
+    lastCacheStats = stats;
+    lastCacheEntryCount = stats.entryCount;
+    renderCacheStatsText();
+    sidebarCacheCount.textContent = t(currentLocale, "sidebar.cacheCount", {
+      count: stats.entryCount,
+    });
   } catch (err) {
     cacheStatsText.textContent = String(err);
   }
@@ -1541,6 +1652,11 @@ async function openSettingsModal(): Promise<void> {
     const settings = await invoke<AppSettings>("get_settings");
     apiKeyInput.value = settings.freesoundApiKey;
     providerModeSelect.value = settings.providerMode;
+    savedLocale = normalizeLocale(settings.language);
+    languageSelect.value = savedLocale;
+    if (currentLocale !== savedLocale) {
+      setLocale(savedLocale);
+    }
   } catch (err) {
     showToast(String(err));
   }
@@ -1548,35 +1664,47 @@ async function openSettingsModal(): Promise<void> {
   settingsModal.classList.remove("hidden");
 }
 
-function closeSettingsModal(): void {
+function closeSettingsModal(revertLanguage = true): void {
   settingsModal.classList.add("hidden");
+  if (revertLanguage && currentLocale !== savedLocale) {
+    setLocale(savedLocale);
+    languageSelect.value = savedLocale;
+  }
 }
 
 openSettingsBtn.addEventListener("click", () => void openSettingsModal());
-closeSettingsBtn.addEventListener("click", closeSettingsModal);
-cancelSettingsBtn.addEventListener("click", closeSettingsModal);
+closeSettingsBtn.addEventListener("click", () => closeSettingsModal(true));
+cancelSettingsBtn.addEventListener("click", () => closeSettingsModal(true));
+
+languageSelect.addEventListener("change", () => {
+  setLocale(normalizeLocale(languageSelect.value));
+});
 
 toggleKeyBtn.addEventListener("click", () => {
   const isPass = apiKeyInput.type === "password";
   apiKeyInput.type = isPass ? "text" : "password";
-  toggleKeyBtn.textContent = isPass ? "Скрыть" : "Показать";
+  toggleKeyBtn.textContent = t(currentLocale, isPass ? "settings.hide" : "settings.show");
 });
 
 saveSettingsBtn.addEventListener("click", async () => {
+  const chosenLocale = normalizeLocale(languageSelect.value);
   const settings: AppSettings = {
     freesoundApiKey: apiKeyInput.value.trim(),
     providerMode: providerModeSelect.value as ProviderMode,
+    language: chosenLocale,
   };
   try {
     await invoke("save_settings", { settings });
+    savedLocale = chosenLocale;
+    setLocale(chosenLocale);
     sidebarProvider.textContent =
       settings.providerMode === "mixkit" || !settings.freesoundApiKey
         ? "Mixkit"
         : "Freesound";
-    closeSettingsModal();
-    showToast("Настройки сохранены");
+    closeSettingsModal(false);
+    showToast(t(currentLocale, "toast.saved"));
   } catch (err) {
-    showToast(`Ошибка сохранения: ${String(err)}`);
+    showToast(t(currentLocale, "toast.saveErr", { err: String(err) }));
   }
 });
 
@@ -1585,7 +1713,7 @@ clearCacheBtn.addEventListener("click", async () => {
     const removed = await invoke<number>("clear_cache");
     preparedWavPaths.clear();
     await refreshCacheStats();
-    showToast(`Кэш очищен (${removed})`);
+    showToast(t(currentLocale, "toast.cacheCleared", { count: removed }));
   } catch (err) {
     showToast(String(err));
   }
@@ -1655,6 +1783,15 @@ window.addEventListener("resize", () => {
 
 // Initialization
 async function init(): Promise<void> {
+  try {
+    const settings = await invoke<AppSettings>("get_settings");
+    savedLocale = normalizeLocale(settings.language);
+    languageSelect.value = savedLocale;
+    setLocale(savedLocale);
+  } catch {
+    setLocale("ru");
+  }
+
   syncDurationSlider("min");
   syncFxControlsFromParams();
   renderEnvelopeCanvas();

@@ -1,0 +1,533 @@
+export type Locale = "en" | "ru" | "es" | "pt-BR" | "zh-CN";
+
+export const LOCALE_OPTIONS: Array<{ code: Locale; label: string }> = [
+  { code: "en", label: "EN — English" },
+  { code: "ru", label: "RU — Русский" },
+  { code: "es", label: "ES — Español" },
+  { code: "pt-BR", label: "pt-BR — Português (Brasil)" },
+  { code: "zh-CN", label: "zh-CN — 简体中文" },
+];
+
+const en = {
+  "sidebar.categories": "Categories",
+  "cat.all": "All sounds",
+  "cat.whoosh": "Whooshes & transitions",
+  "cat.impact": "Impacts & hits",
+  "cat.click": "UI & clicks",
+  "cat.riser": "Risers",
+  "cat.subDrop": "Sub drops",
+  "sidebar.envelope": "Envelope",
+  "action.reset": "Reset",
+  "sidebar.parameters": "Parameters",
+  "param.duration": "Duration",
+  "param.volume": "Volume",
+  "sidebar.cacheCount": "{count} cached",
+  "sidebar.settings": "Settings",
+
+  "topbar.searchPlaceholder": "Search sounds",
+  "topbar.searchBtn": "Search",
+  "topbar.fxRackTitle": "Toggle FX Rack panel",
+  "topbar.minimize": "Minimize",
+  "topbar.close": "Close",
+
+  "scope.title": "Volume Envelope",
+  "scope.notSet": "Not set",
+  "scope.preset": "Preset: {name}",
+  "scope.ref": "Ref: {name}",
+  "scope.points64": "64 points",
+  "scope.hint": "Draw a volume curve",
+
+  "results.ready": "Ready to search",
+  "results.searching": "Searching & computing RMS",
+  "results.loaded": "Loaded {count} · {sources}",
+  "results.noneProvider": "No results · {provider}",
+  "results.searchError": "Search error",
+  "results.shortcutPlay": "Play",
+  "results.shortcutDrag": "WAV to DAW",
+  "results.emptyTitle": "No sounds found",
+  "results.emptyDesc": "Pick another category on the left or widen the duration range",
+  "results.errorTitle": "Failed to search",
+  "results.loadingMore": "Loading next sounds…",
+  "results.retry": "Retry",
+  "results.loadMore": "Load more",
+  "results.allShown": "All found sounds shown",
+
+  "card.playTitle": "Play / Stop",
+  "card.seekTitle": "Click to seek",
+  "card.matchTitle": "Envelope match",
+  "card.wavTitle": "Export 24-bit WAV with current FX",
+
+  "fx.selectSound": "Select a sound",
+  "fx.presetsLabel": "FX Presets",
+  "fx.sectionTime": "Time & Pitch",
+  "fx.sectionSpace": "Space (Freeverb)",
+  "fx.sectionFilters": "Filters & Saturation",
+  "fx.sectionLevel": "Envelope & Level",
+  "fx.previewBtn": "Preview with FX",
+  "fx.tip": "Double-click slider to reset",
+  "fx.noSoundToast": "Search or select a sound first",
+
+  "settings.title": "Sources & Cache Settings",
+  "settings.closeAria": "Close settings",
+  "settings.language": "Interface language",
+  "settings.sourceLabel": "Sound source",
+  "settings.sourceAuto": "Auto (Freesound if key set, otherwise Mixkit)",
+  "settings.sourceFreesound": "Freesound API v2 only",
+  "settings.sourceMixkit": "Mixkit only (no API key)",
+  "settings.apiKeyLabel": "Freesound API Key",
+  "settings.apiKeyPlaceholder": "Paste Freesound v2 token",
+  "settings.show": "Show",
+  "settings.hide": "Hide",
+  "settings.apiNote": "The key is stored locally in SQLite. Without a key, Mixkit & public search are used.",
+  "settings.cacheTitle": "Local cache & temp WAVs",
+  "settings.loading": "Loading",
+  "settings.cacheStats": "{entries} tracks ({size}) · {wavs} WAV",
+  "settings.clearCache": "Clear cache",
+  "settings.cancel": "Cancel",
+  "settings.save": "Save",
+
+  "toast.saved": "Settings saved",
+  "toast.saveErr": "Save error: {err}",
+  "toast.cacheCleared": "Cache cleared ({count})",
+  "toast.wavSaved": "WAV saved: {path}",
+  "toast.exported": "Exported: {title}.wav",
+  "toast.dragErr": "Drag-and-drop error: {err}",
+  "toast.stopErr": "Stop error: {err}",
+
+  "unit.sec": "s",
+  "unit.b": "B",
+  "unit.kb": "KB",
+  "unit.mb": "MB",
+} as const;
+
+export type TranslationKey = keyof typeof en;
+
+const ru: Record<TranslationKey, string> = {
+  "sidebar.categories": "Категории",
+  "cat.all": "Все звуки",
+  "cat.whoosh": "Вуши и переходы",
+  "cat.impact": "Удары и акценты",
+  "cat.click": "Интерфейс и клики",
+  "cat.riser": "Райзеры",
+  "cat.subDrop": "Саб-дропы",
+  "sidebar.envelope": "Огибающая",
+  "action.reset": "Сбросить",
+  "sidebar.parameters": "Параметры",
+  "param.duration": "Длительность",
+  "param.volume": "Громкость",
+  "sidebar.cacheCount": "{count} в кэше",
+  "sidebar.settings": "Настройки",
+
+  "topbar.searchPlaceholder": "Поиск звуков",
+  "topbar.searchBtn": "Найти",
+  "topbar.fxRackTitle": "Показать или скрыть панель FX Rack",
+  "topbar.minimize": "Свернуть",
+  "topbar.close": "Закрыть",
+
+  "scope.title": "Огибающая громкости",
+  "scope.notSet": "Не задана",
+  "scope.preset": "Пресет: {name}",
+  "scope.ref": "Эталон: {name}",
+  "scope.points64": "64 точки",
+  "scope.hint": "Нарисуйте кривую громкости",
+
+  "results.ready": "Готов к поиску",
+  "results.searching": "Поиск и расчёт RMS",
+  "results.loaded": "Загружено {count} · {sources}",
+  "results.noneProvider": "Нет результатов · {provider}",
+  "results.searchError": "Ошибка поиска",
+  "results.shortcutPlay": "Прослушать",
+  "results.shortcutDrag": "WAV в DAW",
+  "results.emptyTitle": "Звуки не найдены",
+  "results.emptyDesc": "Выберите другую категорию слева или расширьте диапазон длительности",
+  "results.errorTitle": "Не удалось выполнить поиск",
+  "results.loadingMore": "Загрузка следующих звуков…",
+  "results.retry": "Повторить",
+  "results.loadMore": "Загрузить ещё",
+  "results.allShown": "Показаны все найденные звуки",
+
+  "card.playTitle": "Воспроизвести / Остановить",
+  "card.seekTitle": "Клик для перемотки",
+  "card.matchTitle": "Совпадение с огибающей",
+  "card.wavTitle": "Экспортировать 24-bit WAV с текущими FX",
+
+  "fx.selectSound": "Выберите звук",
+  "fx.presetsLabel": "Пресеты FX",
+  "fx.sectionTime": "Время и тон",
+  "fx.sectionSpace": "Пространство (Freeverb)",
+  "fx.sectionFilters": "Фильтры и сатурация",
+  "fx.sectionLevel": "Огибающая и уровень",
+  "fx.previewBtn": "Прослушать с FX",
+  "fx.tip": "Двойной клик по слайдеру — сброс",
+  "fx.noSoundToast": "Сначала найдите или выберите звук",
+
+  "settings.title": "Настройки источников и кэша",
+  "settings.closeAria": "Закрыть настройки",
+  "settings.language": "Язык интерфейса",
+  "settings.sourceLabel": "Источник звуков",
+  "settings.sourceAuto": "Авто (Freesound при наличии ключа, иначе Mixkit)",
+  "settings.sourceFreesound": "Только Freesound API v2",
+  "settings.sourceMixkit": "Только Mixkit (без API-ключа)",
+  "settings.apiKeyLabel": "Freesound API Key",
+  "settings.apiKeyPlaceholder": "Вставьте токен Freesound v2",
+  "settings.show": "Показать",
+  "settings.hide": "Скрыть",
+  "settings.apiNote": "Ключ хранится локально в SQLite. Без ключа используется встроенный парсер Mixkit.",
+  "settings.cacheTitle": "Локальный кэш и временные WAV",
+  "settings.loading": "Загрузка",
+  "settings.cacheStats": "{entries} треков ({size}) · {wavs} WAV",
+  "settings.clearCache": "Очистить кэш",
+  "settings.cancel": "Отмена",
+  "settings.save": "Сохранить",
+
+  "toast.saved": "Настройки сохранены",
+  "toast.saveErr": "Ошибка сохранения: {err}",
+  "toast.cacheCleared": "Кэш очищен ({count})",
+  "toast.wavSaved": "WAV сохранён: {path}",
+  "toast.exported": "Экспортировано: {title}.wav",
+  "toast.dragErr": "Ошибка drag-and-drop: {err}",
+  "toast.stopErr": "Ошибка остановки: {err}",
+
+  "unit.sec": "с",
+  "unit.b": "Б",
+  "unit.kb": "КБ",
+  "unit.mb": "МБ",
+};
+
+const es: Record<TranslationKey, string> = {
+  "sidebar.categories": "Categorías",
+  "cat.all": "Todos los sonidos",
+  "cat.whoosh": "Whooshes y transiciones",
+  "cat.impact": "Impactos y golpes",
+  "cat.click": "Interfaz y clics",
+  "cat.riser": "Risers",
+  "cat.subDrop": "Sub drops",
+  "sidebar.envelope": "Envolvente",
+  "action.reset": "Restablecer",
+  "sidebar.parameters": "Parámetros",
+  "param.duration": "Duración",
+  "param.volume": "Volumen",
+  "sidebar.cacheCount": "{count} en caché",
+  "sidebar.settings": "Ajustes",
+
+  "topbar.searchPlaceholder": "Buscar sonidos",
+  "topbar.searchBtn": "Buscar",
+  "topbar.fxRackTitle": "Mostrar u ocultar panel FX Rack",
+  "topbar.minimize": "Minimizar",
+  "topbar.close": "Cerrar",
+
+  "scope.title": "Envolvente de volumen",
+  "scope.notSet": "Sin definir",
+  "scope.preset": "Preajuste: {name}",
+  "scope.ref": "Ref: {name}",
+  "scope.points64": "64 puntos",
+  "scope.hint": "Dibuja una curva de volumen",
+
+  "results.ready": "Listo para buscar",
+  "results.searching": "Buscando y calculando RMS",
+  "results.loaded": "Cargados {count} · {sources}",
+  "results.noneProvider": "Sin resultados · {provider}",
+  "results.searchError": "Error de búsqueda",
+  "results.shortcutPlay": "Reproducir",
+  "results.shortcutDrag": "WAV a DAW",
+  "results.emptyTitle": "No se encontraron sonidos",
+  "results.emptyDesc": "Elige otra categoría a la izquierda o amplía el rango de duración",
+  "results.errorTitle": "Error al buscar",
+  "results.loadingMore": "Cargando más sonidos…",
+  "results.retry": "Reintentar",
+  "results.loadMore": "Cargar más",
+  "results.allShown": "Se muestran todos los sonidos encontrados",
+
+  "card.playTitle": "Reproducir / Detener",
+  "card.seekTitle": "Clic para saltar",
+  "card.matchTitle": "Coincidencia de envolvente",
+  "card.wavTitle": "Exportar WAV de 24 bits con FX actuales",
+
+  "fx.selectSound": "Elige un sonido",
+  "fx.presetsLabel": "Preajustes FX",
+  "fx.sectionTime": "Tiempo y tono",
+  "fx.sectionSpace": "Espacio (Freeverb)",
+  "fx.sectionFilters": "Filtros y saturación",
+  "fx.sectionLevel": "Envolvente y nivel",
+  "fx.previewBtn": "Escuchar con FX",
+  "fx.tip": "Doble clic en un deslizador para restablecer",
+  "fx.noSoundToast": "Busca o selecciona un sonido primero",
+
+  "settings.title": "Ajustes de fuentes y caché",
+  "settings.closeAria": "Cerrar ajustes",
+  "settings.language": "Idioma de la interfaz",
+  "settings.sourceLabel": "Fuente de sonidos",
+  "settings.sourceAuto": "Auto (Freesound con clave, si no Mixkit)",
+  "settings.sourceFreesound": "Solo Freesound API v2",
+  "settings.sourceMixkit": "Solo Mixkit (sin clave API)",
+  "settings.apiKeyLabel": "Freesound API Key",
+  "settings.apiKeyPlaceholder": "Pega el token de Freesound v2",
+  "settings.show": "Mostrar",
+  "settings.hide": "Ocultar",
+  "settings.apiNote": "La clave se guarda localmente en SQLite. Sin clave se usan Mixkit y búsqueda pública.",
+  "settings.cacheTitle": "Caché local y WAV temporales",
+  "settings.loading": "Cargando",
+  "settings.cacheStats": "{entries} pistas ({size}) · {wavs} WAV",
+  "settings.clearCache": "Limpiar caché",
+  "settings.cancel": "Cancelar",
+  "settings.save": "Guardar",
+
+  "toast.saved": "Ajustes guardados",
+  "toast.saveErr": "Error al guardar: {err}",
+  "toast.cacheCleared": "Caché limpiada ({count})",
+  "toast.wavSaved": "WAV guardado: {path}",
+  "toast.exported": "Exportado: {title}.wav",
+  "toast.dragErr": "Error de arrastrar y soltar: {err}",
+  "toast.stopErr": "Error al detener: {err}",
+
+  "unit.sec": "s",
+  "unit.b": "B",
+  "unit.kb": "KB",
+  "unit.mb": "MB",
+};
+
+const ptBR: Record<TranslationKey, string> = {
+  "sidebar.categories": "Categorias",
+  "cat.all": "Todos os sons",
+  "cat.whoosh": "Whooshes e transições",
+  "cat.impact": "Impactos e batidas",
+  "cat.click": "Interface e cliques",
+  "cat.riser": "Risers",
+  "cat.subDrop": "Sub drops",
+  "sidebar.envelope": "Envelope",
+  "action.reset": "Redefinir",
+  "sidebar.parameters": "Parâmetros",
+  "param.duration": "Duração",
+  "param.volume": "Volume",
+  "sidebar.cacheCount": "{count} em cache",
+  "sidebar.settings": "Configurações",
+
+  "topbar.searchPlaceholder": "Buscar sons",
+  "topbar.searchBtn": "Buscar",
+  "topbar.fxRackTitle": "Mostrar ou ocultar painel FX Rack",
+  "topbar.minimize": "Minimizar",
+  "topbar.close": "Fechar",
+
+  "scope.title": "Envelope de volume",
+  "scope.notSet": "Não definido",
+  "scope.preset": "Predefinição: {name}",
+  "scope.ref": "Ref: {name}",
+  "scope.points64": "64 pontos",
+  "scope.hint": "Desenhe uma curva de volume",
+
+  "results.ready": "Pronto para buscar",
+  "results.searching": "Buscando e calculando RMS",
+  "results.loaded": "Carregados {count} · {sources}",
+  "results.noneProvider": "Sem resultados · {provider}",
+  "results.searchError": "Erro na busca",
+  "results.shortcutPlay": "Reproduzir",
+  "results.shortcutDrag": "WAV para DAW",
+  "results.emptyTitle": "Nenhum som encontrado",
+  "results.emptyDesc": "Escolha outra categoria à esquerda ou amplie a faixa de duração",
+  "results.errorTitle": "Falha ao buscar",
+  "results.loadingMore": "Carregando mais sons…",
+  "results.retry": "Tentar novamente",
+  "results.loadMore": "Carregar mais",
+  "results.allShown": "Todos os sons encontrados exibidos",
+
+  "card.playTitle": "Reproduzir / Parar",
+  "card.seekTitle": "Clique para avançar",
+  "card.matchTitle": "Correspondência do envelope",
+  "card.wavTitle": "Exportar WAV 24-bit com os FX atuais",
+
+  "fx.selectSound": "Selecione um som",
+  "fx.presetsLabel": "Predefinições FX",
+  "fx.sectionTime": "Tempo e afinação",
+  "fx.sectionSpace": "Espaço (Freeverb)",
+  "fx.sectionFilters": "Filtros e saturação",
+  "fx.sectionLevel": "Envelope e nível",
+  "fx.previewBtn": "Ouvir com FX",
+  "fx.tip": "Duplo clique no controle para redefinir",
+  "fx.noSoundToast": "Busque ou selecione um som primeiro",
+
+  "settings.title": "Configurações de fontes e cache",
+  "settings.closeAria": "Fechar configurações",
+  "settings.language": "Idioma da interface",
+  "settings.sourceLabel": "Fonte de áudio",
+  "settings.sourceAuto": "Auto (Freesound se houver chave, senão Mixkit)",
+  "settings.sourceFreesound": "Apenas Freesound API v2",
+  "settings.sourceMixkit": "Apenas Mixkit (sem chave API)",
+  "settings.apiKeyLabel": "Freesound API Key",
+  "settings.apiKeyPlaceholder": "Cole o token do Freesound v2",
+  "settings.show": "Mostrar",
+  "settings.hide": "Ocultar",
+  "settings.apiNote": "A chave fica salva localmente no SQLite. Sem chave, o Mixkit e a busca pública são usados.",
+  "settings.cacheTitle": "Cache local e WAVs temporários",
+  "settings.loading": "Carregando",
+  "settings.cacheStats": "{entries} faixas ({size}) · {wavs} WAV",
+  "settings.clearCache": "Limpar cache",
+  "settings.cancel": "Cancelar",
+  "settings.save": "Salvar",
+
+  "toast.saved": "Configurações salvas",
+  "toast.saveErr": "Erro ao salvar: {err}",
+  "toast.cacheCleared": "Cache limpo ({count})",
+  "toast.wavSaved": "WAV salvo: {path}",
+  "toast.exported": "Exportado: {title}.wav",
+  "toast.dragErr": "Erro ao arrastar e soltar: {err}",
+  "toast.stopErr": "Erro ao parar: {err}",
+
+  "unit.sec": "s",
+  "unit.b": "B",
+  "unit.kb": "KB",
+  "unit.mb": "MB",
+};
+
+const zhCN: Record<TranslationKey, string> = {
+  "sidebar.categories": "分类",
+  "cat.all": "全部音效",
+  "cat.whoosh": "呼啸与转场",
+  "cat.impact": "撞击与重击",
+  "cat.click": "界面与点击",
+  "cat.riser": "上升音效",
+  "cat.subDrop": "低频下潜",
+  "sidebar.envelope": "包络曲线",
+  "action.reset": "重置",
+  "sidebar.parameters": "参数",
+  "param.duration": "时长",
+  "param.volume": "音量",
+  "sidebar.cacheCount": "{count} 条缓存",
+  "sidebar.settings": "设置",
+
+  "topbar.searchPlaceholder": "搜索音效",
+  "topbar.searchBtn": "搜索",
+  "topbar.fxRackTitle": "显示或隐藏 FX 机架",
+  "topbar.minimize": "最小化",
+  "topbar.close": "关闭",
+
+  "scope.title": "音量包络",
+  "scope.notSet": "未设置",
+  "scope.preset": "预设: {name}",
+  "scope.ref": "参考: {name}",
+  "scope.points64": "64 点",
+  "scope.hint": "用鼠标绘制音量曲线",
+
+  "results.ready": "准备就绪",
+  "results.searching": "正在搜索并计算 RMS",
+  "results.loaded": "已加载 {count} · {sources}",
+  "results.noneProvider": "无结果 · {provider}",
+  "results.searchError": "搜索出错",
+  "results.shortcutPlay": "试听",
+  "results.shortcutDrag": "拖入 DAW",
+  "results.emptyTitle": "未找到音效",
+  "results.emptyDesc": "请在左侧选择其他分类或放宽时长范围",
+  "results.errorTitle": "搜索失败",
+  "results.loadingMore": "正在加载更多音效…",
+  "results.retry": "重试",
+  "results.loadMore": "加载更多",
+  "results.allShown": "已显示全部匹配音效",
+
+  "card.playTitle": "播放 / 停止",
+  "card.seekTitle": "点击波形跳转",
+  "card.matchTitle": "包络匹配度",
+  "card.wavTitle": "导出带当前 FX 的 24-bit WAV",
+
+  "fx.selectSound": "请选择音效",
+  "fx.presetsLabel": "FX 预设",
+  "fx.sectionTime": "速度与音高",
+  "fx.sectionSpace": "空间混响 (Freeverb)",
+  "fx.sectionFilters": "滤波与饱和",
+  "fx.sectionLevel": "淡入淡出与电平",
+  "fx.previewBtn": "带 FX 试听",
+  "fx.tip": "双击滑块恢复默认值",
+  "fx.noSoundToast": "请先搜索或选择一个音效",
+
+  "settings.title": "音源与缓存设置",
+  "settings.closeAria": "关闭设置",
+  "settings.language": "界面语言",
+  "settings.sourceLabel": "音效来源",
+  "settings.sourceAuto": "自动（有密钥用 Freesound，否则 Mixkit）",
+  "settings.sourceFreesound": "仅 Freesound API v2",
+  "settings.sourceMixkit": "仅 Mixkit（免密钥）",
+  "settings.apiKeyLabel": "Freesound API Key",
+  "settings.apiKeyPlaceholder": "粘贴 Freesound v2 令牌",
+  "settings.show": "显示",
+  "settings.hide": "隐藏",
+  "settings.apiNote": "密钥仅保存在本地 SQLite 中。无密钥时使用 Mixkit 与公开检索。",
+  "settings.cacheTitle": "本地缓存与临时 WAV",
+  "settings.loading": "加载中",
+  "settings.cacheStats": "{entries} 个音频 ({size}) · {wavs} 个 WAV",
+  "settings.clearCache": "清空缓存",
+  "settings.cancel": "取消",
+  "settings.save": "保存",
+
+  "toast.saved": "设置已保存",
+  "toast.saveErr": "保存失败: {err}",
+  "toast.cacheCleared": "缓存已清空 ({count})",
+  "toast.wavSaved": "已保存 WAV: {path}",
+  "toast.exported": "已导出: {title}.wav",
+  "toast.dragErr": "拖拽失败: {err}",
+  "toast.stopErr": "停止失败: {err}",
+
+  "unit.sec": "秒",
+  "unit.b": "B",
+  "unit.kb": "KB",
+  "unit.mb": "MB",
+};
+
+const DICTIONARIES: Record<Locale, Record<TranslationKey, string>> = {
+  en,
+  ru,
+  es,
+  "pt-BR": ptBR,
+  "zh-CN": zhCN,
+};
+
+export function normalizeLocale(raw: string | undefined | null): Locale {
+  if (raw === "en" || raw === "ru" || raw === "es" || raw === "pt-BR" || raw === "zh-CN") {
+    return raw;
+  }
+  return "ru";
+}
+
+export function t(
+  locale: Locale,
+  key: TranslationKey,
+  vars?: Record<string, string | number>
+): string {
+  const dict = DICTIONARIES[locale] ?? DICTIONARIES.en;
+  let text = dict[key] ?? DICTIONARIES.en[key];
+  if (vars) {
+    for (const [k, v] of Object.entries(vars)) {
+      text = text.replaceAll(`{${k}}`, String(v));
+    }
+  }
+  return text;
+}
+
+export function applyDomTranslations(locale: Locale): void {
+  document.documentElement.lang = locale;
+
+  document.querySelectorAll<HTMLElement>("[data-i18n]").forEach((el) => {
+    const key = el.dataset.i18n as TranslationKey | undefined;
+    if (key) {
+      el.textContent = t(locale, key);
+    }
+  });
+
+  document.querySelectorAll<HTMLInputElement>("[data-i18n-placeholder]").forEach((el) => {
+    const key = el.dataset.i18nPlaceholder as TranslationKey | undefined;
+    if (key) {
+      el.placeholder = t(locale, key);
+    }
+  });
+
+  document.querySelectorAll<HTMLElement>("[data-i18n-title]").forEach((el) => {
+    const key = el.dataset.i18nTitle as TranslationKey | undefined;
+    if (key) {
+      el.title = t(locale, key);
+    }
+  });
+
+  document.querySelectorAll<HTMLElement>("[data-i18n-aria-label]").forEach((el) => {
+    const key = el.dataset.i18nAriaLabel as TranslationKey | undefined;
+    if (key) {
+      el.setAttribute("aria-label", t(locale, key));
+    }
+  });
+}

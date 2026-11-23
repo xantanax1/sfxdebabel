@@ -9,11 +9,28 @@ pub enum ProviderMode {
     Mixkit,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
+pub enum Language {
+    #[serde(rename = "en")]
+    En,
+    #[default]
+    #[serde(rename = "ru")]
+    Ru,
+    #[serde(rename = "es")]
+    Es,
+    #[serde(rename = "pt-BR")]
+    PtBr,
+    #[serde(rename = "zh-CN")]
+    ZhCn,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub freesound_api_key: String,
     pub provider_mode: ProviderMode,
+    #[serde(default)]
+    pub language: Language,
 }
 
 impl Default for AppSettings {
@@ -21,6 +38,7 @@ impl Default for AppSettings {
         Self {
             freesound_api_key: String::new(),
             provider_mode: ProviderMode::Auto,
+            language: Language::Ru,
         }
     }
 }

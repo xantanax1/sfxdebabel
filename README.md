@@ -4,7 +4,7 @@
 
 # SFX de Babel
 
-**Поиск звуковых эффектов по форме волны, Pure-Rust DSP FX Rack и мгновенный Drag-and-Drop 24-bit WAV**
+**Envelope-matched sound effects search, pure-Rust DSP FX Rack, and instant 24-bit WAV drag-and-drop**
 
 [![Rust](https://img.shields.io/badge/Rust-Edition_2021-141416?style=for-the-badge&logo=rust&logoColor=ededed)](https://www.rust-lang.org/)
 [![Tauri v2](https://img.shields.io/badge/Tauri-v2-141416?style=for-the-badge&logo=tauri&logoColor=ededed)](https://v2.tauri.app/)
@@ -12,124 +12,126 @@
 [![SQLite](https://img.shields.io/badge/SQLite-Bundled-141416?style=for-the-badge&logo=sqlite&logoColor=ededed)](https://www.sqlite.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-141416?style=for-the-badge)](./LICENSE)
 
-[Возможности](#-возможности) · [Пайплайн DSP](#-пайплайн-обработки) · [Стек](#-технологический-стек) · [Установка](#-сборка-и-запуск) · [Клавиши](#-горячие-клавиши)
+[Features](#-features) · [DSP Pipeline](#-dsp-pipeline) · [Tech Stack](#-tech-stack) · [Build & Run](#-build--run) · [Shortcuts](#-shortcuts)
 
 </div>
 
 ---
 
 > [!NOTE]
-> **Работает сразу «из коробки» без системного FFmpeg и API-ключей.** Встроенный Pure-Rust аудиодвижок декодирует превью прямо в RAM, считает 64-точечные RMS-огибающие, применяет студийные эффекты и экспортирует готовые **24-bit PCM WAV** в Premiere Pro, DaVinci Resolve, CapCut и FL Studio.
+> **Works out of the box with zero external FFmpeg or API keys.** A pure-Rust audio engine decodes previews straight into RAM, extracts 64-point RMS envelopes, applies real-time studio FX, and exports **24-bit PCM WAV** files directly onto the timeline of Premiere Pro, DaVinci Resolve, CapCut, or FL Studio.
 
 ---
 
-## ✨ Возможности
+## ✨ Features
 
-| Модуль | Что делает | Технология |
+| Module | What it does | Stack |
 | :--- | :--- | :--- |
-| 🌊 **Envelope Matching** | Поиск звуков по нарисованной мышкой кривой громкости (`64` точки) с живым пересчётом процента совпадения | `HTML5 Canvas` + `Rayon` |
-| 🎚️ **Audio FX Rack** | Неразрушающая обработка в реальном времени: `Slowed`, `Speedup`, `Reverse`, `Freeverb`, `LPF/HPF`, `Drive`, `Fade`, `Limiter` | Pure-Rust `fx.rs` |
-| ♾️ **Бесконечный скролл** | Потоковая дозагрузка новых страниц при прокрутке с дедупликацией и переводом русских запросов **RU → EN** | `Mixkit` + `Freesound` |
-| 🧲 **Нативный Drag & Drop** | Захват любой карточки из окна сразу передаёт обработанный `.wav` файл прямо на таймлайн DAW / NLE | `tauri-plugin-drag` + `hound` |
-| ⚡ **Мгновенное прослушивание** | Превью и перемотка по вейвформе в выделенном аудиопотоке с авто-кэшированием в RAM и SQLite | `symphonia` + `rodio` + `rusqlite` |
+| 🌊 **Envelope Matching** | Draw a custom volume contour (`64` bins) on canvas and rank sounds live by shape similarity | `HTML5 Canvas` + `Rayon` |
+| 🎚️ **Audio FX Rack** | Non-destructive DSP chain: `Slowed`, `Speedup`, `Reverse`, `Freeverb`, `LPF/HPF`, `Drive`, `Fade`, `Limiter` | Pure-Rust `fx.rs` |
+| ♾️ **Infinite Scroll** | Seamless cursor pagination with ID deduplication and built-in **RU → EN** SFX query translation | `Mixkit` + `Freesound` |
+| 🧲 **Native Drag & Drop** | Drag any card outside the window to render and drop a 24-bit `.wav` straight into your DAW or NLE | `tauri-plugin-drag` + `hound` |
+| ⚡ **Instant Preview** | Dedicated playback thread with waveform click-to-seek, SQLite metadata/vector cache, and RAM LRU buffer | `symphonia` + `rodio` + `rusqlite` |
+| 🌍 **5 UI Languages** | Instant runtime switching in Settings between **EN**, **RU**, **ES**, **pt-BR**, and **zh-CN** | `SQLite` + `i18n.ts` |
 
 > [!TIP]
-> **Двойной клик** по любому слайдеру в **FX Rack** сбрасывает параметр в значение по умолчанию, а при изменении настроек эффектов вейвформа и длительность карточки пересчитываются автоматически через `80 ms`.
+> **Double-click** any slider in **FX Rack** to reset it to default. Tweaking any FX parameter updates the active card's 64-point waveform, duration, and scope reference contour automatically after an `80 ms` debounce.
 
 ---
 
-## 🔄 Пайплайн обработки
+## 🔄 DSP Pipeline
 
 ```mermaid
 flowchart LR
-    A["🔍 Запрос RU/EN +<br/>Огибающая 64 pt"] --> B["🌐 Mixkit /<br/>Freesound API & Web"]
-    B --> C["🧠 RAM Bytes<br/>(без мусора на диске)"]
+    A["🔍 Query +<br/>64-pt Envelope"] --> B["🌐 Mixkit /<br/>Freesound API & Web"]
+    B --> C["🧠 In-Memory Bytes<br/>(zero disk clutter)"]
     C --> D["🎼 Symphonia Decode<br/>+ Rayon RMS"]
-    D --> E["📊 Cosine + RMSE<br/>Матчинг формы волны"]
+    D --> E["📊 Cosine + RMSE<br/>Envelope Matching"]
     E --> F["🎛️ FX Chain<br/>Rev · Catmull-Rom · EQ · Freeverb"]
-    F --> G["🔊 Rodio Preview<br/>(выделенный поток)"]
+    F --> G["🔊 Rodio Preview<br/>(dedicated audio thread)"]
     F --> H["🧲 24-bit WAV<br/>OS Drag-and-Drop"]
 ```
 
 <details>
-<summary><b>🔬 Подробнее о DSP-алгоритмах под капотом (<code>src-tauri/src/audio/fx.rs</code>)</b></summary>
+<summary><b>🔬 Under the Hood: DSP Algorithms (<code>src-tauri/src/audio/fx.rs</code>)</b></summary>
 
-1. **Reverse:** покадровый разворот буфера (`chunks_exact(channels)`) с сохранением порядка стереоканалов `[L, R]`.
-2. **Speed / Pitch (`0.50x – 2.00x`):** 4-точечная кубическая интерполяция **Catmull-Rom** по каждому каналу; при ускорении (`> 1.02x`) предварительно включается антиалиасинговый ФНЧ Баттерворта.
-3. **Biquad EQ (`Lowpass` / `Highpass`):** фильтры второго порядка по **Audio EQ Cookbook** (Direct Form II Transposed, независимое состояние на канал, защита от денормалов).
-4. **Drive (Saturator):** мягкий вейвшейпер `(x * gain).tanh() / gain.tanh()` с компенсацией громкости.
-5. **Algorithmic Stereo Freeverb:** автоматический апмикс моно в стерео, `8` параллельных демпфированных comb-фильтров + `4` последовательных all-pass фильтра со стерео-сдвигом `+23` сэмпла на правый канал, добавлением хвоста реверберации и плавной обрезкой тишины ниже `-60 dBFS`.
-6. **Fade & Limiter:** приподнятая косинусоида для `Fade In / Fade Out`, пиковая нормализация к `-0.3 dBFS` (`0.96605`) и мягкий/жёсткий лимитер `[-0.98, 0.98]`.
+1. **Reverse:** Frame-accurate interleaved reversal (`chunks_exact(channels)`) preserving `[L, R]` channel order.
+2. **Speed / Pitch (`0.50x – 2.00x`):** 4-point **Catmull-Rom** cubic interpolation per channel, preceded by a Butterworth anti-aliasing low-pass filter when speeding up (`> 1.02x`).
+3. **Biquad EQ (`Lowpass` / `Highpass`):** Second-order RBJ Audio EQ Cookbook filters (Direct Form II Transposed with independent per-channel state and denormal flushing).
+4. **Drive (Saturator):** Soft waveshaper `(x * gain).tanh() / gain.tanh()` with automatic gain compensation.
+5. **Algorithmic Stereo Freeverb:** Automatic mono-to-stereo upmix, `8` parallel damped comb filters + `4` series all-pass filters with a `+23`-sample stereo spread, reverb tail extension, and smooth `-60 dBFS` silence trimming.
+6. **Fade & Limiter:** Raised-cosine `Fade In / Fade Out`, `-0.3 dBFS` (`0.96605`) peak normalization, and `[-0.98, 0.98]` soft/hard safety limiter.
 
 </details>
 
 ---
 
-## 🎯 Пресеты
+## 🎯 Presets
 
 <details>
-<summary><b>🎚️ Пресеты FX Rack (1 клик) и шаблоны огибающей</b></summary>
+<summary><b>🎚️ One-Click FX Rack & Envelope Scope Presets</b></summary>
 
-### Пресеты эффектов (**FX Rack**)
-| Пресет | Эффект |
+### FX Rack Presets
+| Preset | Effect |
 | :--- | :--- |
-| `Clean (Reset)` | Чистый сигнал с нормализацией `-0.3 dBFS` |
+| `Clean (Reset)` | Bypass FX with `-0.3 dBFS` peak normalization |
 | `Slowed + Reverb` | `0.80x` pitch-down, `42%` Freeverb (`Room 78%`), LPF `14.0 kHz` |
-| `Speedup` | `1.32x` ускорение, HPF `60 Hz`, лёгкий `Drive 12%` |
-| `Reverse Riser` | Реверс с реверберацией `28%` и плавными фейдами `40 / 60 ms` |
-| `Muffled / Underwater` | Срез верхов `LPF 850 Hz`, `HPF 80 Hz`, глубокий dampened reverb |
-| `Heavy Impact` | `0.90x`, насыщенный `Drive 55%`, плотная середина и короткий room |
+| `Speedup` | `1.32x` pitch-up, HPF `60 Hz`, subtle `12%` Drive |
+| `Reverse Riser` | Reversed buffer with `28%` reverb and `40 / 60 ms` fades |
+| `Muffled / Underwater` | Steep `LPF 850 Hz`, `HPF 80 Hz`, deep damped room |
+| `Heavy Impact` | `0.90x`, `55%` Drive saturation, punchy midrange, short room |
 
-### Пресеты огибающей (**Envelope Scope**)
-- `Whoosh` — колоколообразная волна с пиком в центре
-- `Impact` — мгновенный транзиент в начале и экспоненциальный спад
-- `Sub Drop` — быстрая атака с длинным низкочастотным хвостом
-- `UI Click` — ультракороткий импульс
-- `Riser` — нарастание до пика к финалу с резким срезом
+### Envelope Scope Presets
+- `Whoosh` — centered bell-curve swell
+- `Impact` — sharp initial transient with exponential decay
+- `Sub Drop` — fast attack with sustained low-end tail
+- `UI Click` — ultra-short impulse
+- `Riser` — rising build-up to a sharp cutoff
 
 </details>
 
 ---
 
-## 🌐 Источники звуков и кэширование
+## 🌐 Sound Sources & Caching
 
-- **Режим `Auto` (по умолчанию):** работает без регистрации через **Mixkit**, а при прокрутке за пределы выдачи (или по специфическим запросам) бесшовно догружает результаты из **Freesound Web**.
-- **Freesound API v2:** откройте **Настройки** в левом сайдбаре и вставьте токен — откроется прямой поиск по полной базе с серверной фильтрацией длительности.
-- **Локальное хранилище:** 64-точечные RMS-векторы и метаданные сохраняются в локальной БД SQLite (`WAL`), а декодированные буферы удерживаются в LRU-кэше в RAM (до `128` треков).
+- **`Auto` Mode (default):** Starts with keyless **Mixkit** results and seamlessly continues into **Freesound Web** pages as you scroll past the initial list or search niche terms.
+- **Freesound API v2:** Paste your personal token in **Settings** for direct API search with server-side duration filtering.
+- **Persistence:** 64-point RMS envelopes, metadata, and settings (including interface language) are stored in bundled SQLite (`WAL`), while decoded audio stays in a `128`-entry RAM LRU cache for instant FX tweaking.
 
 > [!IMPORTANT]
-> В режиме без API-ключа при очень быстрой и длинной прокрутке каталога Freesound Web может временно вернуть **HTTP 429**. Приложение не теряет уже найденные треки и отображает кнопку **«Повторить»** внизу списка.
+> When scrolling deeply without an API key, public Freesound Web search may temporarily rate-limit with **HTTP 429**. Existing results stay intact and a **Retry** button appears at the bottom of the list.
 
 ---
 
-## 🧱 Структура проекта
+## 🧱 Project Structure
 
 ```text
 sfxdebabel/
 ├── src/                          # Frontend (Vanilla TypeScript, HTML5 Canvas, CSS)
-│   ├── index.html                # 3-панельный студийный UI (Sidebar + Stage + FX Rack)
-│   ├── styles.css                # Graphite Dark Glassmorphism (сетка 4px, hairline-границы)
+│   ├── index.html                # 3-pane studio layout (Sidebar + Stage + FX Rack)
+│   ├── styles.css                # Graphite Dark Glassmorphism (4px grid, hairlines)
+│   ├── i18n.ts                   # Localization dictionaries (EN, RU, ES, pt-BR, zh-CN)
 │   └── main.ts                   # Canvas Scope, Infinite Scroll, FX Rack, Drag-and-Drop
 ├── src-tauri/                    # Rust Backend (Tauri v2)
-│   ├── tauri.conf.json           # Прозрачное безрамочное окно, shadow: false
-│   ├── capabilities/default.json # Права окна, edge-resize и tauri-plugin-drag
+│   ├── tauri.conf.json           # Frameless transparent window (shadow: false)
+│   ├── capabilities/default.json # Window, edge-resize, and tauri-plugin-drag permissions
 │   └── src/
 │       ├── audio/
-│       │   ├── decoder.rs        # Symphonia декодер из памяти (MP3, OGG, WAV, FLAC)
-│       │   ├── envelope.rs       # Rayon 64-pt RMS и гибридный матчинг (Cosine + RMSE)
-│       │   ├── fx.rs             # Pure-Rust DSP цепочка эффектов
-│       │   ├── player.rs         # Выделенный аудиопоток Rodio с перемоткой
-│       │   └── export.rs         # Экспорт 16-bit и 24-bit WAV через Hound
+│       │   ├── decoder.rs        # In-memory Symphonia decoder (MP3, OGG, WAV, FLAC)
+│       │   ├── envelope.rs       # Rayon 64-pt RMS extraction & Cosine+RMSE matching
+│       │   ├── fx.rs             # Pure-Rust DSP effects chain
+│       │   ├── player.rs         # Dedicated Rodio audio thread with seek support
+│       │   └── export.rs         # 16-bit & 24-bit WAV export via Hound
 │       ├── providers/
-│       │   ├── mod.rs            # Трейт SfxProvider и словарь RU → EN
-│       │   ├── freesound.rs      # Freesound API v2 с постраничной пагинацией
-│       │   ├── freesound_web.rs  # Публичный веб-поиск Freesound (без ключа)
-│       │   └── mixkit.rs         # Парсер Mixkit с пагинацией
-│       ├── db.rs                 # SQLite кэш и настройки (rusqlite bundled)
-│       ├── commands.rs           # Tauri IPC команды и LRU-кэш
-│       ├── models.rs             # Типы запросов/ответов
-│       ├── error.rs              # Единая обработка ошибок (thiserror)
-│       └── lib.rs                # Регистрация плагинов и команд
+│       │   ├── mod.rs            # SfxProvider trait & RU → EN query normalizer
+│       │   ├── freesound.rs      # Paginated Freesound API v2 provider
+│       │   ├── freesound_web.rs  # Keyless public Freesound Web continuation provider
+│       │   └── mixkit.rs         # Paginated Mixkit HTML scraper
+│       ├── db.rs                 # Bundled SQLite settings & envelope cache
+│       ├── commands.rs           # Tauri IPC commands & RAM LRU cache
+│       ├── models.rs             # Shared IPC & settings structs
+│       ├── error.rs              # Typed AppError via thiserror
+│       └── lib.rs                # App setup & command registration
 ├── package.json
 ├── tsconfig.json
 └── vite.config.ts
@@ -137,25 +139,25 @@ sfxdebabel/
 
 ---
 
-## 🛠️ Технологический стек
+## 🛠️ Tech Stack
 
-| Слой | Компоненты |
+| Layer | Technologies |
 | :--- | :--- |
 | **Desktop / IPC** | Rust (`2021`), Tauri v2, `tauri-plugin-drag`, `tokio` |
-| **DSP и аудио** | `symphonia`, `rodio`, `hound`, `rayon` |
-| **Сеть и скрапинг** | `reqwest` (`rustls-tls`), `scraper`, `serde`, `serde_json` |
-| **База данных** | `rusqlite` (`bundled` SQLite + `WAL`) |
+| **Audio & DSP** | `symphonia`, `rodio`, `hound`, `rayon` |
+| **Network & HTML** | `reqwest` (`rustls-tls`), `scraper`, `serde`, `serde_json` |
+| **Database** | `rusqlite` (`bundled` SQLite + `WAL`) |
 | **Frontend** | Vanilla TypeScript, HTML5 Canvas, CSS, Vite |
 
 ---
 
-## 🚀 Сборка и запуск
+## 🚀 Build & Run
 
-### Предварительные требования
-- **Rust** (`1.82+`, edition `2021`) + MSVC Build Tools на Windows
+### Prerequisites
+- **Rust** (`1.82+`, edition `2021`) + MSVC Build Tools on Windows
 - **Node.js** `18+`
 
-### Запуск в режиме разработки
+### Development Mode
 
 ```bash
 git clone https://github.com/xantanax1/sfxdebabel.git
@@ -165,37 +167,37 @@ npm run tauri dev
 ```
 
 > [!WARNING]
-> **Windows PowerShell:** если политика выполнения скриптов блокирует `npm.ps1`, запускайте команды через `.cmd`-обёртки: `npm.cmd install` и `npm.cmd run tauri dev` (либо работайте из `cmd.exe`).
+> **Windows PowerShell:** If script execution policy blocks `npm.ps1`, run commands via `.cmd` shims (`npm.cmd install` and `npm.cmd run tauri dev`) or use `cmd.exe`.
 
-### Проверка и продакшн-сборка
+### Checks & Release Build
 
 ```bash
-# Проверка TypeScript и сборка фронтенда
+# TypeScript check & frontend bundle
 npm run build
 
-# Проверка и юнит-тесты Rust (DSP, 24-bit WAV, парсеры, RU→EN)
+# Rust check & unit tests (DSP, 24-bit WAV roundtrip, scrapers, RU→EN)
 cd src-tauri
 cargo check
 cargo test
 
-# Сборка установщика Tauri
+# Build release installer / binary
 npm run tauri build
 ```
 
 ---
 
-## ⌨️ Горячие клавиши
+## ⌨️ Shortcuts
 
-| Действие | Управление |
+| Action | Shortcut / Gesture |
 | :--- | :--- |
-| Фокус на поиск | <kbd>Ctrl</kbd> + <kbd>K</kbd> / <kbd>Cmd</kbd> + <kbd>K</kbd> |
-| Воспроизвести / остановить | <kbd>Space</kbd> |
-| Перемотка по звуку | Клик по мини-вейвформе карточки |
-| Сброс параметра FX Rack | Двойной клик по слайдеру |
-| Экспорт 24-bit WAV в DAW / NLE | Перетаскивание карточки за пределы окна |
+| Focus search bar | <kbd>Ctrl</kbd> + <kbd>K</kbd> / <kbd>Cmd</kbd> + <kbd>K</kbd> |
+| Play / Stop preview | <kbd>Space</kbd> |
+| Seek within sound | Click anywhere on a card's mini-waveform |
+| Reset FX slider | Double-click any FX Rack slider |
+| Export 24-bit WAV to DAW / NLE | Drag any sound card out of the window |
 
 ---
 
-## 📄 Лицензия
+## 📄 License
 
-Распространяется под лицензией [MIT](./LICENSE).
+Distributed under the [MIT License](./LICENSE).

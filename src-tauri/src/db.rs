@@ -6,10 +6,11 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rusqlite::{params, Connection};
 
 use crate::error::AppError;
-use crate::models::{AppSettings, CacheStats, ProviderMode};
+use crate::models::{AppSettings, CacheStats, Language, ProviderMode};
 
 const KEY_FREESOUND_API: &str = "freesound_api_key";
 const KEY_PROVIDER_MODE: &str = "provider_mode";
+const KEY_LANGUAGE: &str = "language";
 
 #[derive(Debug, Clone)]
 pub struct CachedSfx {
@@ -92,6 +93,15 @@ impl Database {
                         _ => ProviderMode::Auto,
                     };
                 }
+                KEY_LANGUAGE => {
+                    settings.language = match v.as_str() {
+                        "en" => Language::En,
+                        "es" => Language::Es,
+                        "pt-BR" => Language::PtBr,
+                        "zh-CN" => Language::ZhCn,
+                        _ => Language::Ru,
+                    };
+                }
                 _ => {}
             }
         }
@@ -110,6 +120,13 @@ impl Database {
             ProviderMode::Freesound => "freesound",
             ProviderMode::Mixkit => "mixkit",
         };
+        let lang_str = match settings.language {
+            Language::En => "en",
+            Language::Ru => "ru",
+            Language::Es => "es",
+            Language::PtBr => "pt-BR",
+            Language::ZhCn => "zh-CN",
+        };
         tx.execute(
             "INSERT INTO settings (key, value) VALUES (?1, ?2)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
@@ -119,6 +136,11 @@ impl Database {
             "INSERT INTO settings (key, value) VALUES (?1, ?2)
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             params![KEY_PROVIDER_MODE, mode_str],
+        )?;
+        tx.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![KEY_LANGUAGE, lang_str],
         )?;
         tx.commit()?;
         Ok(())
