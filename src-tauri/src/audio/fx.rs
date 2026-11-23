@@ -76,10 +76,19 @@ impl AudioBuffer {
     }
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum SpeedMode {
+    #[default]
+    PitchAndTempo,
+    TempoOnly,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", default)]
 pub struct FxParams {
     pub speed_pitch: f32,
+    pub speed_mode: SpeedMode,
     pub reverse: bool,
     pub reverb_mix: f32,
     pub reverb_room_size: f32,
@@ -96,6 +105,7 @@ impl Default for FxParams {
     fn default() -> Self {
         Self {
             speed_pitch: 1.0,
+            speed_mode: SpeedMode::PitchAndTempo,
             reverse: false,
             reverb_mix: 0.0,
             reverb_room_size: 0.65,
@@ -115,6 +125,7 @@ impl FxParams {
         let finite = |v: f32, fallback: f32| if v.is_finite() { v } else { fallback };
         Self {
             speed_pitch: finite(self.speed_pitch, 1.0).clamp(0.5, 2.0),
+            speed_mode: self.speed_mode,
             reverse: self.reverse,
             reverb_mix: finite(self.reverb_mix, 0.0).clamp(0.0, 1.0),
             reverb_room_size: finite(self.reverb_room_size, 0.65).clamp(0.1, 1.0),
@@ -131,6 +142,7 @@ impl FxParams {
     pub fn is_fx_clean(&self) -> bool {
         let s = self.sanitized();
         (s.speed_pitch - 1.0).abs() < 0.005
+            && s.speed_mode == SpeedMode::PitchAndTempo
             && !s.reverse
             && s.reverb_mix < 0.005
             && s.lowpass_hz >= 19_950.0
@@ -150,8 +162,14 @@ impl FxParams {
         let mut tags: Vec<&'static str> = Vec::new();
         if s.speed_pitch < 0.98 {
             tags.push("slowed");
+            if s.speed_mode == SpeedMode::TempoOnly {
+                tags.push("tempo");
+            }
         } else if s.speed_pitch > 1.02 {
             tags.push("speedup");
+            if s.speed_mode == SpeedMode::TempoOnly {
+                tags.push("tempo");
+            }
         }
         if s.reverse {
             tags.push("rev");
@@ -171,14 +189,19 @@ impl FxParams {
         if s.fade_in_ms > 0 || s.fade_out_ms > 0 {
             tags.push("fade");
         }
-        if tags.is_empty() && !s.normalize {
-            tags.push("raw");
+        if tags.is_empty() {
+            if !s.normalize {
+                tags.push("raw");
+            } else {
+                tags.push("tempo");
+            }
         }
 
         // 32-bit FNV-1a hash of quantized parameter values so changing any knob yields a unique WAV path.
         let mut hash: u32 = 0x811c_9dc5;
-        let parts: [u32; 11] = [
+        let parts: [u32; 12] = [
             (s.speed_pitch * 100.0).round() as u32,
+            u32::from(s.speed_mode == SpeedMode::TempoOnly),
             u32::from(s.reverse),
             (s.reverb_mix * 100.0).round() as u32,
             (s.reverb_room_size * 100.0).round() as u32,
@@ -361,16 +384,23 @@ impl FxChain {
             samples = rev;
         }
 
-        // 2. Speed / Pitch resampling with Catmull-Rom 4-point cubic interpolation.
+        // 2. Speed adjustment: Pitch+Tempo (Catmull-Rom) or Tempo-Only (WSOLA).
         if (params.speed_pitch - 1.0).abs() >= 0.005 {
-            // Pre-filter before downsampling when speed > 1.0 to avoid aliasing foldback.
-            if params.speed_pitch > 1.02 {
-                let nyquist_guard = (sr as f32 * 0.45) / params.speed_pitch;
-                apply_biquad_in_place(&mut samples, ch, || {
-                    BiquadChannel::lowpass(sr as f32, nyquist_guard, FRAC_1_SQRT_2)
-                });
+            match params.speed_mode {
+                SpeedMode::PitchAndTempo => {
+                    // Pre-filter before downsampling when speed > 1.0 to avoid aliasing foldback.
+                    if params.speed_pitch > 1.02 {
+                        let nyquist_guard = (sr as f32 * 0.45) / params.speed_pitch;
+                        apply_biquad_in_place(&mut samples, ch, || {
+                            BiquadChannel::lowpass(sr as f32, nyquist_guard, FRAC_1_SQRT_2)
+                        });
+                    }
+                    samples = resample_catmull_rom(&samples, ch, params.speed_pitch);
+                }
+                SpeedMode::TempoOnly => {
+                    samples = time_stretch_wsola(&samples, ch, sr, params.speed_pitch);
+                }
             }
-            samples = resample_catmull_rom(&samples, ch, params.speed_pitch);
         }
 
         // 3. Second-order biquad EQ filters (HPF -> LPF).
@@ -469,6 +499,157 @@ fn resample_catmull_rom(samples: &[f32], channels: usize, speed_pitch: f32) -> V
         }
     }
 
+    out
+}
+
+/// Pure-Rust WSOLA (Waveform Similarity Overlap-Add) time-stretcher without pitch change.
+/// Uses joint multi-channel normalized cross-correlation so stereo channels stay phase-locked.
+fn time_stretch_wsola(
+    samples: &[f32],
+    channels: usize,
+    sample_rate: u32,
+    speed: f32,
+) -> Vec<f32> {
+    let ch = channels.max(1);
+    let in_frames = samples.len() / ch;
+    if in_frames < 64 {
+        return resample_catmull_rom(samples, ch, speed);
+    }
+
+    let out_frames = ((in_frames as f64 / speed as f64).round() as usize).max(1);
+    let desired_win = (sample_rate as f32 * 0.040).round() as usize;
+    let mut win = desired_win.min((in_frames / 2) & !1).max(32);
+    win &= !1; // Keep window even so hs = win / 2 gives exact 50% Hann COLA.
+    let hs = win / 2;
+    let max_start = in_frames.saturating_sub(win);
+    if max_start == 0 {
+        return resample_catmull_rom(samples, ch, speed);
+    }
+
+    // 9 ms search radius -> 18 ms span covers fundamentals down to ~55 Hz while staying < hs/2.
+    let delta_max = ((sample_rate as f32 * 0.009).round() as usize)
+        .min(hs.saturating_sub(1))
+        .max(1);
+
+    let hann: Vec<f32> = (0..win)
+        .map(|k| 0.5 * (1.0 - (2.0 * PI * k as f32 / win as f32).cos()))
+        .collect();
+
+    let buf_frames = out_frames + win;
+    let mut out = vec![0.0_f32; buf_frames * ch];
+    let mut weights = vec![0.0_f32; buf_frames];
+
+    // Frame 0: flat leading half preserves attack transients without initial fade smear.
+    for k in 0..win {
+        let w = if k < hs { 1.0 } else { hann[k] };
+        weights[k] += w;
+        let src_base = k * ch;
+        let dst_base = k * ch;
+        for c in 0..ch {
+            out[dst_base + c] += samples[src_base + c] * w;
+        }
+    }
+
+    let score_lag = |cand_start: usize, ref_start: usize, nom_in: usize| -> Option<f64> {
+        let mut dot = 0.0_f64;
+        let mut cand_energy = 0.0_f64;
+        let ref_slice = &samples[ref_start * ch..(ref_start + hs) * ch];
+        let cand_slice = &samples[cand_start * ch..(cand_start + hs) * ch];
+        for i in 0..ref_slice.len() {
+            let r = f64::from(ref_slice[i]);
+            let s = f64::from(cand_slice[i]);
+            dot += r * s;
+            cand_energy += s * s;
+        }
+        if cand_energy < 1e-12 {
+            return None;
+        }
+        let corr = dot / cand_energy.sqrt();
+        let dist = cand_start.abs_diff(nom_in) as f64 / delta_max as f64;
+        Some(corr - 0.02 * dist * dist)
+    };
+
+    let ha_f = hs as f64 * speed as f64;
+    let mut prev_in_pos = 0usize;
+    let mut step_idx = 1usize;
+
+    loop {
+        let out_pos = step_idx * hs;
+        if out_pos >= out_frames {
+            break;
+        }
+
+        let nom_in = ((step_idx as f64 * ha_f).round() as usize).min(max_start);
+        let ref_start = (prev_in_pos + hs).min(in_frames - hs);
+
+        let ref_slice = &samples[ref_start * ch..(ref_start + hs) * ch];
+        let ref_energy: f64 = ref_slice.iter().map(|&v| f64::from(v) * f64::from(v)).sum();
+
+        let best_in = if ref_energy < 1e-12 {
+            nom_in
+        } else {
+            let lo = nom_in.saturating_sub(delta_max);
+            let hi = (nom_in + delta_max).min(max_start);
+
+            // Coarse pass (step 2), then fine pass (+/- 2 around best coarse lag).
+            let mut best_coarse = nom_in;
+            let mut best_coarse_score = f64::NEG_INFINITY;
+            let mut cand = lo;
+            while cand <= hi {
+                if let Some(score) = score_lag(cand, ref_start, nom_in) {
+                    if score > best_coarse_score {
+                        best_coarse_score = score;
+                        best_coarse = cand;
+                    }
+                }
+                cand += 2;
+            }
+
+            if best_coarse_score == f64::NEG_INFINITY {
+                nom_in
+            } else {
+                let fine_lo = best_coarse.saturating_sub(2).max(lo);
+                let fine_hi = (best_coarse + 2).min(hi);
+                let mut best_fine = best_coarse;
+                let mut best_fine_score = best_coarse_score;
+                for f_cand in fine_lo..=fine_hi {
+                    if let Some(score) = score_lag(f_cand, ref_start, nom_in) {
+                        if score > best_fine_score {
+                            best_fine_score = score;
+                            best_fine = f_cand;
+                        }
+                    }
+                }
+                best_fine
+            }
+        };
+
+        for k in 0..win {
+            let w = hann[k];
+            let dst_f = out_pos + k;
+            weights[dst_f] += w;
+            let src_base = (best_in + k) * ch;
+            let dst_base = dst_f * ch;
+            for c in 0..ch {
+                out[dst_base + c] += samples[src_base + c] * w;
+            }
+        }
+
+        prev_in_pos = best_in;
+        step_idx += 1;
+    }
+
+    for f in 0..out_frames {
+        let w = weights[f];
+        if w > 1e-4 {
+            let inv = 1.0 / w;
+            let base = f * ch;
+            for c in 0..ch {
+                out[base + c] *= inv;
+            }
+        }
+    }
+    out.truncate(out_frames * ch);
     out
 }
 
@@ -805,5 +986,184 @@ mod tests {
         assert!(out.samples.iter().all(|&s| s.is_finite() && s.abs() <= 0.98));
         let peak = out.samples.iter().fold(0.0_f32, |a, &b| a.max(b.abs()));
         assert!(peak > 0.9, "expected normalized peak near -0.3 dBFS, got {peak}");
+    }
+
+    fn estimate_frequency_zero_crossings(samples: &[f32], sample_rate: u32) -> f32 {
+        // Use the interior 60% to avoid boundary edges.
+        let start = samples.len() / 5;
+        let end = (samples.len() * 4) / 5;
+        let slice = &samples[start..end];
+        let mut first_idx = None;
+        let mut crossings = 0usize;
+        for i in 1..slice.len() {
+            if slice[i - 1] <= 0.0 && slice[i] > 0.0 {
+                // Linear interpolation for sub-sample crossing accuracy.
+                let frac = -slice[i - 1] / (slice[i] - slice[i - 1]);
+                let pos = i as f32 - 1.0 + frac;
+                if first_idx.is_none() {
+                    first_idx = Some(pos);
+                } else {
+                    crossings += 1;
+                }
+            }
+        }
+        let Some(first) = first_idx else {
+            return 0.0;
+        };
+        let mut last = first;
+        for i in (1..slice.len()).rev() {
+            if slice[i - 1] <= 0.0 && slice[i] > 0.0 {
+                let frac = -slice[i - 1] / (slice[i] - slice[i - 1]);
+                last = i as f32 - 1.0 + frac;
+                break;
+            }
+        }
+        let span_secs = (last - first) / sample_rate as f32;
+        if span_secs <= 0.0 || crossings == 0 {
+            return 0.0;
+        }
+        crossings as f32 / span_secs
+    }
+
+    #[test]
+    fn wsola_tempo_only_lengths_and_no_clipping() {
+        let sr = 44_100;
+        let buf = make_sine_buffer(330.0, 1.0, sr, 2);
+        let in_frames = buf.samples.len() / 2;
+
+        for speed in [0.5_f32, 0.75, 1.25, 1.5, 2.0] {
+            for normalize in [false, true] {
+                let out = FxChain::process(
+                    &buf,
+                    &FxParams {
+                        speed_pitch: speed,
+                        speed_mode: SpeedMode::TempoOnly,
+                        normalize,
+                        ..Default::default()
+                    },
+                );
+                let expected = in_frames as f32 / speed;
+                let out_frames = out.samples.len() / 2;
+                let rel_err = (out_frames as f32 - expected).abs() / expected;
+                assert!(
+                    rel_err <= 0.02,
+                    "speed {speed}: expected ~{expected}, got {out_frames} (err {rel_err})"
+                );
+                assert!(
+                    out.samples.iter().all(|&s| s.is_finite() && s.abs() <= 0.98),
+                    "speed {speed} normalize {normalize}: clipping or non-finite sample detected"
+                );
+            }
+        }
+    }
+
+    #[test]
+    fn wsola_preserves_stereo_channel_sync() {
+        let sr = 44_100;
+        let mut buf = make_sine_buffer(220.0, 1.0, sr, 2);
+        // Add a synchronized amplitude burst in the middle so timing sync can also be checked.
+        for f in 20_000..22_000 {
+            buf.samples[f * 2] *= 1.8;
+            buf.samples[f * 2 + 1] *= 1.8;
+        }
+
+        for speed in [0.7_f32, 1.5] {
+            let out = FxChain::process(
+                &buf,
+                &FxParams {
+                    speed_pitch: speed,
+                    speed_mode: SpeedMode::TempoOnly,
+                    normalize: false,
+                    ..Default::default()
+                },
+            );
+            assert_eq!(out.channels, 2);
+            let mut max_l = (0usize, 0.0_f32);
+            let mut max_r = (0usize, 0.0_f32);
+            for (f, frame) in out.samples.chunks_exact(2).enumerate() {
+                assert!(
+                    (frame[1] - frame[0] * 0.5).abs() < 1e-4,
+                    "stereo proportionality drifted at frame {f}: L={}, R={}",
+                    frame[0],
+                    frame[1]
+                );
+                if frame[0].abs() > max_l.1 {
+                    max_l = (f, frame[0].abs());
+                }
+                if frame[1].abs() > max_r.1 {
+                    max_r = (f, frame[1].abs());
+                }
+            }
+            assert_eq!(max_l.0, max_r.0, "L/R peak frames diverged at speed {speed}");
+        }
+    }
+
+    #[test]
+    fn wsola_preserves_sine_pitch() {
+        let sr = 44_100;
+        let freq = 440.0_f32;
+        let buf = make_sine_buffer(freq, 1.0, sr, 1);
+
+        for speed in [0.7_f32, 1.5] {
+            let out = FxChain::process(
+                &buf,
+                &FxParams {
+                    speed_pitch: speed,
+                    speed_mode: SpeedMode::TempoOnly,
+                    normalize: false,
+                    ..Default::default()
+                },
+            );
+            let measured = estimate_frequency_zero_crossings(&out.samples, sr);
+            let rel_err = (measured - freq).abs() / freq;
+            assert!(
+                rel_err <= 0.03,
+                "speed {speed}: expected pitch ~{freq} Hz, measured {measured} Hz"
+            );
+        }
+
+        // Sanity check: PitchAndTempo at 1.5x actually shifts pitch to ~660 Hz.
+        let pitched = FxChain::process(
+            &buf,
+            &FxParams {
+                speed_pitch: 1.5,
+                speed_mode: SpeedMode::PitchAndTempo,
+                normalize: false,
+                ..Default::default()
+            },
+        );
+        let pitched_freq = estimate_frequency_zero_crossings(&pitched.samples, sr);
+        assert!(
+            (pitched_freq - 660.0).abs() < 15.0,
+            "expected ~660 Hz in PitchAndTempo, got {pitched_freq}"
+        );
+    }
+
+    #[test]
+    fn speed_mode_changes_filename_suffix_and_clean_state() {
+        let clean = FxParams::default();
+        assert!(clean.is_fx_clean());
+        assert!(clean.filename_suffix().is_empty());
+
+        let pitch_slow = FxParams {
+            speed_pitch: 0.8,
+            speed_mode: SpeedMode::PitchAndTempo,
+            ..Default::default()
+        };
+        let tempo_slow = FxParams {
+            speed_pitch: 0.8,
+            speed_mode: SpeedMode::TempoOnly,
+            ..Default::default()
+        };
+        assert!(!tempo_slow.is_fx_clean());
+        assert_ne!(pitch_slow.filename_suffix(), tempo_slow.filename_suffix());
+        assert!(tempo_slow.filename_suffix().contains("slowed_tempo_"));
+
+        let tempo_fast = FxParams {
+            speed_pitch: 1.4,
+            speed_mode: SpeedMode::TempoOnly,
+            ..Default::default()
+        };
+        assert!(tempo_fast.filename_suffix().contains("speedup_tempo_"));
     }
 }
