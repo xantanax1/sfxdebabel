@@ -93,8 +93,11 @@ interface PlaybackStatus {
   durationSecs: number;
 }
 
+type SpeedMode = "pitchAndTempo" | "tempoOnly";
+
 interface FxParams {
   speedPitch: number;
+  speedMode: SpeedMode;
   reverse: boolean;
   reverbMix: number;
   reverbRoomSize: number;
@@ -115,6 +118,7 @@ interface FxWaveformResult {
 function defaultFxParams(): FxParams {
   return {
     speedPitch: 1.0,
+    speedMode: "pitchAndTempo",
     reverse: false,
     reverbMix: 0.0,
     reverbRoomSize: 0.65,
@@ -233,6 +237,9 @@ const fxPresetButtons = Array.from(
 );
 
 const fxSpeedInput = document.getElementById("fx-speed") as HTMLInputElement;
+const fxSpeedModeButtons = Array.from(
+  document.querySelectorAll<HTMLButtonElement>(".fx-seg-btn[data-speed-mode]")
+);
 const fxReverseInput = document.getElementById("fx-reverse") as HTMLInputElement;
 const fxReverbMixInput = document.getElementById("fx-reverb-mix") as HTMLInputElement;
 const fxRoomSizeInput = document.getElementById("fx-room-size") as HTMLInputElement;
@@ -388,6 +395,7 @@ function formatHz(hz: number): string {
 function isFxClean(p: FxParams): boolean {
   return (
     Math.abs(p.speedPitch - 1.0) < 0.005 &&
+    p.speedMode === "pitchAndTempo" &&
     !p.reverse &&
     p.reverbMix < 0.005 &&
     p.lowpassHz >= 19950 &&
@@ -409,6 +417,11 @@ function updateRangeFill(input: HTMLInputElement): void {
 
 function syncFxControlsFromParams(): void {
   fxSpeedInput.value = fxParams.speedPitch.toFixed(2);
+  fxSpeedModeButtons.forEach((btn) => {
+    const active = btn.dataset.speedMode === fxParams.speedMode;
+    btn.classList.toggle("active", active);
+    btn.setAttribute("aria-pressed", String(active));
+  });
   fxReverseInput.checked = fxParams.reverse;
   fxReverbMixInput.value = String(Math.round(fxParams.reverbMix * 100));
   fxRoomSizeInput.value = String(Math.round(fxParams.reverbRoomSize * 100));
@@ -435,8 +448,12 @@ function syncFxControlsFromParams(): void {
 }
 
 function readFxParamsFromControls(): void {
+  const activeModeBtn = fxSpeedModeButtons.find((b) => b.classList.contains("active"));
+  const speedMode: SpeedMode =
+    activeModeBtn?.dataset.speedMode === "tempoOnly" ? "tempoOnly" : "pitchAndTempo";
   fxParams = {
     speedPitch: parseFloat(fxSpeedInput.value),
+    speedMode,
     reverse: fxReverseInput.checked,
     reverbMix: parseFloat(fxReverbMixInput.value) / 100,
     reverbRoomSize: parseFloat(fxRoomSizeInput.value) / 100,
@@ -1776,6 +1793,20 @@ fxSliders.forEach((slider) => {
       bumpElement(valReadout);
       scheduleFxWaveformUpdate();
     }
+  });
+});
+
+fxSpeedModeButtons.forEach((btn) => {
+  btn.addEventListener("click", () => {
+    const mode = btn.dataset.speedMode;
+    if (mode !== "pitchAndTempo" && mode !== "tempoOnly") return;
+    fxSpeedModeButtons.forEach((b) => {
+      const active = b === btn;
+      b.classList.toggle("active", active);
+      b.setAttribute("aria-pressed", String(active));
+    });
+    readFxParamsFromControls();
+    scheduleFxWaveformUpdate();
   });
 });
 

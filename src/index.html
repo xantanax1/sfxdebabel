@@ -358,6 +358,30 @@
               />
             </div>
 
+            <div class="fx-control fx-mode-control">
+              <span class="fx-mode-label" data-i18n="fx.speedModeLabel">Режим скорости</span>
+              <div class="fx-segmented" role="group" aria-label="Speed mode">
+                <button
+                  type="button"
+                  class="fx-seg-btn active"
+                  data-speed-mode="pitchAndTempo"
+                  aria-pressed="true"
+                  data-i18n="fx.speedModePitchTempo"
+                >
+                  Тон + темп
+                </button>
+                <button
+                  type="button"
+                  class="fx-seg-btn"
+                  data-speed-mode="tempoOnly"
+                  aria-pressed="false"
+                  data-i18n="fx.speedModeTempoOnly"
+                >
+                  Только темп
+                </button>
+              </div>
+            </div>
+
             <label class="fx-switch-row" for="fx-reverse">
               <span class="fx-switch-label">Reverse</span>
               <input id="fx-reverse" class="fx-checkbox" type="checkbox" />
