@@ -51,6 +51,9 @@ const en = {
   "results.retry": "Retry",
   "results.loadMore": "Load more",
   "results.allShown": "All found sounds shown",
+  "error.layoutChanged": "{provider} changed its page layout, so results can't be read. The app needs an update — try another source in Settings meanwhile.",
+  "error.rateLimited": "{provider} is rate limiting requests (HTTP 429). Wait a moment and press Retry.",
+  "error.rateLimitedAfter": "{provider} is rate limiting requests (HTTP 429). Retry in about {secs} s.",
 
   "card.playTitle": "Play / Stop",
   "card.seekTitle": "Click to seek",
@@ -154,6 +157,9 @@ const ru: Record<TranslationKey, string> = {
   "results.retry": "Повторить",
   "results.loadMore": "Загрузить ещё",
   "results.allShown": "Показаны все найденные звуки",
+  "error.layoutChanged": "{provider} изменил вёрстку страниц, поэтому результаты не удаётся прочитать. Нужно обновить приложение — пока выберите другой источник в настройках.",
+  "error.rateLimited": "{provider} ограничивает частоту запросов (HTTP 429). Подождите немного и нажмите «Повторить».",
+  "error.rateLimitedAfter": "{provider} ограничивает частоту запросов (HTTP 429). Повторите примерно через {secs} с.",
 
   "card.playTitle": "Воспроизвести / Остановить",
   "card.seekTitle": "Клик для перемотки",
@@ -255,6 +261,9 @@ const es: Record<TranslationKey, string> = {
   "results.retry": "Reintentar",
   "results.loadMore": "Cargar más",
   "results.allShown": "Se muestran todos los sonidos encontrados",
+  "error.layoutChanged": "{provider} cambió el diseño de su página y no se pueden leer los resultados. La app necesita una actualización; mientras tanto elige otra fuente en Ajustes.",
+  "error.rateLimited": "{provider} está limitando las solicitudes (HTTP 429). Espera un momento y pulsa Reintentar.",
+  "error.rateLimitedAfter": "{provider} está limitando las solicitudes (HTTP 429). Reintenta en unos {secs} s.",
 
   "card.playTitle": "Reproducir / Detener",
   "card.seekTitle": "Clic para saltar",
@@ -356,6 +365,9 @@ const ptBR: Record<TranslationKey, string> = {
   "results.retry": "Tentar novamente",
   "results.loadMore": "Carregar mais",
   "results.allShown": "Todos os sons encontrados exibidos",
+  "error.layoutChanged": "O {provider} mudou o layout da página e os resultados não podem ser lidos. O app precisa de atualização — enquanto isso, escolha outra fonte em Configurações.",
+  "error.rateLimited": "O {provider} está limitando as requisições (HTTP 429). Aguarde um instante e clique em Tentar novamente.",
+  "error.rateLimitedAfter": "O {provider} está limitando as requisições (HTTP 429). Tente novamente em cerca de {secs} s.",
 
   "card.playTitle": "Reproduzir / Parar",
   "card.seekTitle": "Clique para avançar",
@@ -457,6 +469,9 @@ const zhCN: Record<TranslationKey, string> = {
   "results.retry": "重试",
   "results.loadMore": "加载更多",
   "results.allShown": "已显示全部匹配音效",
+  "error.layoutChanged": "{provider} 更改了页面结构，无法读取结果。需要更新应用——请先在设置中切换其他来源。",
+  "error.rateLimited": "{provider} 正在限制请求频率（HTTP 429）。请稍候后点击重试。",
+  "error.rateLimitedAfter": "{provider} 正在限制请求频率（HTTP 429）。请约 {secs} 秒后重试。",
 
   "card.playTitle": "播放 / 停止",
   "card.seekTitle": "点击波形跳转",

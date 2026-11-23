@@ -264,6 +264,27 @@ function showToast(message: string): void {
   }, 2800);
 }
 
+/**
+ * Backend errors for scraper problems are machine-readable markers:
+ *   PROVIDER_LAYOUT_CHANGED|<provider>|<detail>
+ *   RATE_LIMITED|<provider>|<retry_after_secs?>
+ * They may be embedded in a longer message, so match anywhere and show a localized text.
+ */
+function humanizeBackendMessage(raw: string): string {
+  const layout = /PROVIDER_LAYOUT_CHANGED\|([^|]*)\|/.exec(raw);
+  if (layout) {
+    return t(currentLocale, "error.layoutChanged", { provider: layout[1] || "Source" });
+  }
+  const rate = /RATE_LIMITED\|([^|]*)\|(\d*)/.exec(raw);
+  if (rate) {
+    const provider = rate[1] || "Source";
+    return rate[2]
+      ? t(currentLocale, "error.rateLimitedAfter", { provider, secs: rate[2] })
+      : t(currentLocale, "error.rateLimited", { provider });
+  }
+  return raw;
+}
+
 function formatDuration(secs: number): string {
   const unit = t(currentLocale, "unit.sec");
   if (!Number.isFinite(secs) || secs < 0) return `0.00 ${unit}`;
@@ -1501,7 +1522,7 @@ async function runSearch(queryOverride?: string): Promise<void> {
     }
 
     if (resp.warning) {
-      warningBanner.textContent = resp.warning;
+      warningBanner.textContent = humanizeBackendMessage(resp.warning);
       warningBanner.classList.remove("hidden");
     }
 
@@ -1531,7 +1552,7 @@ async function runSearch(queryOverride?: string): Promise<void> {
     errCard.className = "state-card";
     const strong = document.createElement("strong");
     strong.textContent = t(currentLocale, "results.errorTitle");
-    const errText = document.createTextNode(String(err));
+    const errText = document.createTextNode(humanizeBackendMessage(String(err)));
     errCard.append(strong, errText);
     resultsList.appendChild(errCard);
     lastSummaryMode = "error";
@@ -1589,7 +1610,7 @@ async function loadNextPage(emptyStreak = 0): Promise<void> {
 
     isLoadingMore = false;
     updateResultsSummary();
-    updateScrollSentinel(resp.warning ?? undefined);
+    updateScrollSentinel(resp.warning ? humanizeBackendMessage(resp.warning) : undefined);
     requestAnimationFrame(() => updatePlaybackUi());
     void refreshFooterMeta();
 
@@ -1599,7 +1620,7 @@ async function loadNextPage(emptyStreak = 0): Promise<void> {
   } catch (err) {
     if (token !== lastSearchToken) return;
     isLoadingMore = false;
-    updateScrollSentinel(String(err));
+    updateScrollSentinel(humanizeBackendMessage(String(err)));
   }
 }
 
