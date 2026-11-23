@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="ru">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>SFX de Babel</title>
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <div class="resize-handle resize-n" data-resize="North"></div>
+      <div class="resize-handle resize-s" data-resize="South"></div>
+      <div class="resize-handle resize-e" data-resize="East"></div>
+      <div class="resize-handle resize-w" data-resize="West"></div>
+      <div class="resize-handle resize-nw" data-resize="NorthWest"></div>
+      <div class="resize-handle resize-ne" data-resize="NorthEast"></div>
+      <div class="resize-handle resize-sw" data-resize="SouthWest"></div>
+      <div class="resize-handle resize-se" data-resize="SouthEast"></div>
+
+      <aside class="sidebar">
+        <div class="sidebar-header" data-tauri-drag-region>
+          <div class="brand" data-tauri-drag-region>
+            <svg class="brand-mark" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" aria-hidden="true">
+              <line x1="2" y1="6" x2="2" y2="10" />
+              <line x1="5" y1="4" x2="5" y2="12" />
+              <line x1="8" y1="2" x2="8" y2="14" />
+              <line x1="11" y1="4.5" x2="11" y2="11.5" />
+              <line x1="14" y1="6.5" x2="14" y2="9.5" />
+            </svg>
+            <span class="brand-name" data-tauri-drag-region>SFX de Babel</span>
+          </div>
+        </div>
+
+        <div class="sidebar-scroll">
+          <div class="sidebar-group">
+            <div class="sidebar-label">Категории</div>
+            <nav class="nav-list" aria-label="Категории звуков">
+              <button type="button" class="nav-item" data-query="">
+                <span class="nav-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="3" width="7" height="7" rx="1.5" />
+                    <rect x="14" y="3" width="7" height="7" rx="1.5" />
+                    <rect x="3" y="14" width="7" height="7" rx="1.5" />
+                    <rect x="14" y="14" width="7" height="7" rx="1.5" />
+                  </svg>
+                </span>
+                <span class="nav-text">Все звуки</span>
+              </button>
+              <button type="button" class="nav-item active" data-query="whoosh">
+                <span class="nav-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2" />
+                    <path d="M9.6 4.6A2 2 0 1 1 11 8H2" />
+                    <path d="M12.6 19.4A2 2 0 1 0 14 16H2" />
+                  </svg>
+                </span>
+                <span class="nav-text">Вуши и переходы</span>
+              </button>
+              <button type="button" class="nav-item" data-query="impact">
+                <span class="nav-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
+                  </svg>
+                </span>
+                <span class="nav-text">Удары и акценты</span>
+              </button>
+              <button type="button" class="nav-item" data-query="click">
+                <span class="nav-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M4 4l7.07 17 2.51-7.39L21 11.07z" />
+                  </svg>
+                </span>
+                <span class="nav-text">Интерфейс и клики</span>
+              </button>
+              <button type="button" class="nav-item" data-query="riser">
+                <span class="nav-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="22 7 13.5 15.5 8.5 10.5 2 17" />
+                    <polyline points="16 7 22 7 22 13" />
+                  </svg>
+                </span>
+                <span class="nav-text">Райзеры</span>
+              </button>
+              <button type="button" class="nav-item" data-query="sub drop">
+                <span class="nav-icon">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M2 12h3l2-6 4 12 3-8 2 4h6" />
+                  </svg>
+                </span>
+                <span class="nav-text">Саб-дропы</span>
+              </button>
+            </nav>
+          </div>
+
+          <div class="sidebar-group">
+            <div class="sidebar-label">Огибающая</div>
+            <div class="preset-grid" role="group" aria-label="Пресеты формы волны">
+              <button type="button" class="preset-btn" data-preset="whoosh">Whoosh</button>
+              <button type="button" class="preset-btn" data-preset="impact">Impact</button>
+              <button type="button" class="preset-btn" data-preset="sub-drop">Sub Drop</button>
+              <button type="button" class="preset-btn" data-preset="ui-click">UI Click</button>
+              <button type="button" class="preset-btn" data-preset="riser">Riser</button>
+              <button type="button" id="btn-reset-envelope-sidebar" class="preset-btn preset-btn--muted">
+                Сбросить
+              </button>
+            </div>
+          </div>
+
+          <div class="sidebar-group">
+            <div class="sidebar-label">Параметры</div>
+            <div class="param-block">
+              <div class="param-row">
+                <span class="param-name">Длительность</span>
+                <span id="duration-readout" class="param-value">0.1–5.0 с</span>
+              </div>
+              <div class="dual-range">
+                <div class="dual-range-track">
+                  <div id="dual-range-fill" class="dual-range-fill"></div>
+                </div>
+                <input
+                  id="min-duration"
+                  type="range"
+                  min="0.1"
+                  max="10.0"
+                  step="0.1"
+                  value="0.1"
+                  aria-label="Минимальная длительность"
+                />
+                <input
+                  id="max-duration"
+                  type="range"
+                  min="0.1"
+                  max="10.0"
+                  step="0.1"
+                  value="5.0"
+                  aria-label="Максимальная длительность"
+                />
+              </div>
+            </div>
+
+            <div class="param-block">
+              <div class="param-row">
+                <span class="param-name">Громкость</span>
+                <span id="volume-readout" class="param-value">85%</span>
+              </div>
+              <input
+                id="volume-slider"
+                class="single-range"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="85"
+                aria-label="Громкость превью"
+              />
+            </div>
+          </div>
+        </div>
+
+        <footer class="sidebar-footer">
+          <div class="footer-meta">
+            <div class="source-row">
+              <span class="status-dot" aria-hidden="true"></span>
+              <span id="sidebar-provider" class="source-name">Mixkit</span>
+            </div>
+            <span id="sidebar-cache-count" class="cache-count">0 в кэше</span>
+          </div>
+          <button id="btn-open-settings" class="sidebar-settings-btn" type="button">
+            <span class="nav-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="4" y1="21" x2="4" y2="14" />
+                <line x1="4" y1="10" x2="4" y2="3" />
+                <line x1="12" y1="21" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12" y2="3" />
+                <line x1="20" y1="21" x2="20" y2="16" />
+                <line x1="20" y1="12" x2="20" y2="3" />
+                <line x1="2" y1="14" x2="6" y2="14" />
+                <line x1="10" y1="8" x2="14" y2="8" />
+                <line x1="18" y1="16" x2="22" y2="16" />
+              </svg>
+            </span>
+            <span class="nav-text">Настройки</span>
+          </button>
+        </footer>
+      </aside>
+
+      <div class="main-stage">
+        <header class="topbar">
+          <form id="search-form" class="search-form">
+            <div class="search-input-wrap">
+              <svg class="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="11" cy="11" r="7" />
+                <line x1="16.65" y1="16.65" x2="21" y2="21" />
+              </svg>
+              <input
+                id="search-input"
+                type="text"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="Поиск звуков"
+              />
+              <kbd class="kbd">Ctrl K</kbd>
+            </div>
+            <button id="btn-search" class="primary-btn" type="submit">Найти</button>
+          </form>
+
+          <div class="topbar-drag-spacer" data-tauri-drag-region></div>
+
+          <button
+            id="btn-toggle-fx"
+            class="fx-toggle-btn active"
+            type="button"
+            title="Показать или скрыть панель FX Rack"
+          >
+            <span id="fx-active-dot" class="fx-dot hidden" aria-hidden="true"></span>
+            <span>FX Rack</span>
+          </button>
+
+          <div class="window-actions">
+            <button
+              id="btn-minimize"
+              class="icon-btn"
+              type="button"
+              title="Свернуть"
+              aria-label="Свернуть окно"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                <line x1="6" y1="12" x2="18" y2="12" />
+              </svg>
+            </button>
+            <button
+              id="btn-close"
+              class="icon-btn icon-btn--close"
+              type="button"
+              title="Закрыть"
+              aria-label="Закрыть окно"
+            >
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+                <line x1="7" y1="7" x2="17" y2="17" />
+                <line x1="17" y1="7" x2="7" y2="17" />
+              </svg>
+            </button>
+          </div>
+        </header>
+
+        <main class="stage-content">
+          <section class="scope-panel">
+            <div class="scope-header">
+              <div class="scope-title-group">
+                <span class="scope-title">Огибающая громкости</span>
+                <span id="envelope-state-label" class="scope-state">Не задана</span>
+              </div>
+              <button type="button" id="btn-reset-envelope" class="reset-link hidden">
+                Сбросить
+              </button>
+            </div>
+
+            <div class="canvas-well">
+              <canvas id="envelope-canvas"></canvas>
+              <div id="envelope-hint" class="envelope-hint">
+                Нарисуйте кривую громкости
+              </div>
+            </div>
+          </section>
+
+          <section class="results-section">
+            <div class="results-header">
+              <div id="results-summary" class="results-summary">Готов к поиску</div>
+              <div class="results-shortcuts">
+                <span class="shortcut-item"><kbd class="kbd">Space</kbd> Прослушать</span>
+                <span class="shortcut-item"><kbd class="kbd">Drag</kbd> WAV в DAW</span>
+              </div>
+            </div>
+
+            <div id="warning-banner" class="warning-banner hidden"></div>
+            <div id="results-list" class="results-list"></div>
+          </section>
+        </main>
+      </div>
+
+      <aside id="fx-rack" class="fx-rack" aria-label="FX Rack">
+        <div class="fx-header">
+          <div class="fx-title-wrap">
+            <span class="fx-title">FX Rack</span>
+            <span id="fx-active-sound" class="fx-subtitle">Выберите звук</span>
+          </div>
+          <button id="btn-fx-reset" class="reset-link" type="button">Сброс</button>
+        </div>
+
+        <div class="fx-scroll">
+          <div class="fx-section">
+            <div class="fx-section-label">Пресеты FX</div>
+            <div class="fx-preset-grid" role="group" aria-label="Пресеты эффектов">
+              <button type="button" class="fx-preset-btn active" data-fx-preset="clean">
+                Clean (Reset)
+              </button>
+              <button type="button" class="fx-preset-btn" data-fx-preset="slowed-reverb">
+                Slowed + Reverb
+              </button>
+              <button type="button" class="fx-preset-btn" data-fx-preset="speedup">
+                Speedup
+              </button>
+              <button type="button" class="fx-preset-btn" data-fx-preset="reverse-riser">
+                Reverse Riser
+              </button>
+              <button type="button" class="fx-preset-btn" data-fx-preset="muffled">
+                Muffled / Underwater
+              </button>
+              <button type="button" class="fx-preset-btn" data-fx-preset="heavy-impact">
+                Heavy Impact
+              </button>
+            </div>
+          </div>
+
+          <div class="fx-section">
+            <div class="fx-section-label">Время и тон</div>
+
+            <div class="fx-control">
+              <div class="fx-control-row">
+                <label for="fx-speed">Speed / Pitch</label>
+                <span id="val-fx-speed" class="fx-value">1.00x</span>
+              </div>
+              <input
+                id="fx-speed"
+                class="fx-range"
+                type="range"
+                min="0.50"
+                max="2.00"
+                step="0.01"
+                value="1.00"
+                data-default="1.00"
+              />
+            </div>
+
+            <label class="fx-switch-row" for="fx-reverse">
+              <span class="fx-switch-label">Reverse</span>
+              <input id="fx-reverse" class="fx-checkbox" type="checkbox" />
+              <span class="fx-switch" aria-hidden="true"></span>
+            </label>
+          </div>
+
+          <div class="fx-section">
+            <div class="fx-section-label">Пространство (Freeverb)</div>
+
+            <div class="fx-control">
+              <div class="fx-control-row">
+                <label for="fx-reverb-mix">Reverb Mix</label>
+                <span id="val-fx-reverb-mix" class="fx-value">0%</span>
+              </div>
+              <input
+                id="fx-reverb-mix"
+                class="fx-range"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="0"
+                data-default="0"
+              />
+            </div>
+
+            <div class="fx-control">
+              <div class="fx-control-row">
+                <label for="fx-room-size">Room Size</label>
+                <span id="val-fx-room-size" class="fx-value">65%</span>
+              </div>
+              <input
+                id="fx-room-size"
+                class="fx-range"
+                type="range"
+                min="10"
+                max="100"
+                step="1"
+                value="65"
+                data-default="65"
+              />
+            </div>
+
+            <div class="fx-control">
+              <div class="fx-control-row">
+                <label for="fx-damping">Damping</label>
+                <span id="val-fx-damping" class="fx-value">45%</span>
+              </div>
+              <input
+                id="fx-damping"
+                class="fx-range"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="45"
+                data-default="45"
+              />
+            </div>
+          </div>
+
+          <div class="fx-section">
+            <div class="fx-section-label">Фильтры и сатурация</div>
+
+            <div class="fx-control">
+              <div class="fx-control-row">
+                <label for="fx-lowpass">Lowpass</label>
+                <span id="val-fx-lowpass" class="fx-value">20.0 kHz</span>
+              </div>
+              <input
+                id="fx-lowpass"
+                class="fx-range"
+                type="range"
+                min="0"
+                max="1000"
+                step="1"
+                value="1000"
+                data-default="1000"
+              />
+            </div>
+
+            <div class="fx-control">
+              <div class="fx-control-row">
+                <label for="fx-highpass">Highpass</label>
+                <span id="val-fx-highpass" class="fx-value">20 Hz</span>
+              </div>
+              <input
+                id="fx-highpass"
+                class="fx-range"
+                type="range"
+                min="0"
+                max="1000"
+                step="1"
+                value="0"
+                data-default="0"
+              />
+            </div>
+
+            <div class="fx-control">
+              <div class="fx-control-row">
+                <label for="fx-drive">Drive</label>
+                <span id="val-fx-drive" class="fx-value">0%</span>
+              </div>
+              <input
+                id="fx-drive"
+                class="fx-range"
+                type="range"
+                min="0"
+                max="100"
+                step="1"
+                value="0"
+                data-default="0"
+              />
+            </div>
+          </div>
+
+          <div class="fx-section">
+            <div class="fx-section-label">Огибающая и уровень</div>
+
+            <div class="fx-control">
+              <div class="fx-control-row">
+                <label for="fx-fade-in">Fade In</label>
+                <span id="val-fx-fade-in" class="fx-value">0 ms</span>
+              </div>
+              <input
+                id="fx-fade-in"
+                class="fx-range"
+                type="range"
+                min="0"
+                max="2000"
+                step="10"
+                value="0"
+                data-default="0"
+              />
+            </div>
+
+            <div class="fx-control">
+              <div class="fx-control-row">
+                <label for="fx-fade-out">Fade Out</label>
+                <span id="val-fx-fade-out" class="fx-value">0 ms</span>
+              </div>
+              <input
+                id="fx-fade-out"
+                class="fx-range"
+                type="range"
+                min="0"
+                max="2000"
+                step="10"
+                value="0"
+                data-default="0"
+              />
+            </div>
+
+            <label class="fx-switch-row" for="fx-normalize">
+              <span class="fx-switch-label">Normalize (-0.3 dB)</span>
+              <input id="fx-normalize" class="fx-checkbox" type="checkbox" checked />
+              <span class="fx-switch" aria-hidden="true"></span>
+            </label>
+          </div>
+        </div>
+
+        <footer class="fx-footer">
+          <button id="btn-fx-preview" class="primary-btn fx-preview-btn" type="button">
+            Прослушать с FX
+          </button>
+          <span class="fx-tip">Двойной клик по слайдеру — сброс</span>
+        </footer>
+      </aside>
+    </div>
+
+    <div
+      id="settings-modal"
+      class="modal-backdrop hidden"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="settings-title"
+    >
+      <div class="studio-modal">
+        <div class="modal-header">
+          <h2 id="settings-title">Настройки источников и кэша</h2>
+          <button id="btn-close-settings" class="icon-btn" type="button" aria-label="Закрыть настройки">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round">
+              <line x1="7" y1="7" x2="17" y2="17" />
+              <line x1="17" y1="7" x2="7" y2="17" />
+            </svg>
+          </button>
+        </div>
+
+        <div class="modal-body">
+          <div class="field">
+            <label for="input-provider-mode">Источник звуков</label>
+            <select id="input-provider-mode" class="studio-select">
+              <option value="auto">Авто (Freesound при наличии ключа, иначе Mixkit)</option>
+              <option value="freesound">Только Freesound API v2</option>
+              <option value="mixkit">Только Mixkit (без API-ключа)</option>
+            </select>
+          </div>
+
+          <div class="field">
+            <label for="input-api-key">Freesound API Key</label>
+            <div class="key-input-row">
+              <input
+                id="input-api-key"
+                type="password"
+                autocomplete="off"
+                spellcheck="false"
+                placeholder="Вставьте токен Freesound v2"
+              />
+              <button id="btn-toggle-key" class="ghost-btn" type="button">Показать</button>
+            </div>
+            <p class="field-note">
+              Ключ хранится локально в SQLite. Без ключа используется встроенный парсер Mixkit.
+            </p>
+          </div>
+
+          <div class="cache-box">
+            <div class="cache-meta">
+              <span class="cache-title">Локальный кэш и временные WAV</span>
+              <span id="cache-stats-text" class="cache-stats">Загрузка</span>
+            </div>
+            <button id="btn-clear-cache" class="ghost-btn" type="button">Очистить кэш</button>
+          </div>
+        </div>
+
+        <div class="modal-footer">
+          <button id="btn-cancel-settings" class="ghost-btn" type="button">Отмена</button>
+          <button id="btn-save-settings" class="primary-btn" type="button">Сохранить</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="toast-container" class="toast-container" aria-live="polite"></div>
+
+    <script type="module" src="./main.ts"></script>
+  </body>
+</html>
