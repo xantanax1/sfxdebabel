@@ -225,14 +225,24 @@ const minimizeBtn = document.getElementById("btn-minimize") as HTMLButtonElement
 const closeBtn = document.getElementById("btn-close") as HTMLButtonElement;
 const toastContainer = document.getElementById("toast-container") as HTMLDivElement;
 
+function bumpElement(el: HTMLElement | null | undefined): void {
+  if (!el) return;
+  el.classList.remove("is-bumped");
+  void el.offsetWidth;
+  el.classList.add("is-bumped");
+}
+
 function showToast(message: string): void {
   const el = document.createElement("div");
   el.className = "toast";
   el.textContent = message;
   toastContainer.appendChild(el);
   setTimeout(() => {
-    el.remove();
-  }, 3000);
+    el.classList.add("toast--leaving");
+    setTimeout(() => {
+      el.remove();
+    }, 200);
+  }, 2800);
 }
 
 function formatDuration(secs: number): string {
@@ -1127,10 +1137,22 @@ function attachCardDragBehavior(card: HTMLElement, item: SfxItem): void {
   });
 }
 
-function createSfxCardElement(item: SfxItem): HTMLElement {
+function createSfxCardElement(item: SfxItem, staggerIndex?: number): HTMLElement {
   const card = document.createElement("article");
   card.className = "sfx-card";
   card.dataset.soundId = item.id;
+  if (staggerIndex !== undefined) {
+    card.classList.add("sfx-card--enter");
+    card.style.setProperty("--enter-delay", `${Math.min(staggerIndex, 10) * 24}ms`);
+    card.addEventListener(
+      "animationend",
+      () => {
+        card.classList.remove("sfx-card--enter");
+        card.style.removeProperty("--enter-delay");
+      },
+      { once: true }
+    );
+  }
 
   const playBtn = document.createElement("button");
   playBtn.type = "button";
@@ -1296,9 +1318,9 @@ function renderResultsList(): void {
     return;
   }
 
-  for (const item of currentItems) {
-    resultsList.appendChild(createSfxCardElement(item));
-  }
+  currentItems.forEach((item, idx) => {
+    resultsList.appendChild(createSfxCardElement(item, idx));
+  });
 
   updateScrollSentinel();
   resultsList.appendChild(scrollSentinel);
@@ -1475,10 +1497,10 @@ async function loadNextPage(emptyStreak = 0): Promise<void> {
       newItems.push(item);
     }
 
-    for (const item of newItems) {
-      const card = createSfxCardElement(item);
+    newItems.forEach((item, idx) => {
+      const card = createSfxCardElement(item, idx);
       resultsList.insertBefore(card, scrollSentinel);
-    }
+    });
 
     isLoadingMore = false;
     updateResultsSummary();
@@ -1528,11 +1550,17 @@ toggleFxBtn.addEventListener("click", () => {
 fxPresetButtons.forEach((btn) => {
   btn.addEventListener("click", () => {
     const preset = btn.dataset.fxPreset;
-    if (preset) applyFxPreset(preset);
+    if (preset) {
+      applyFxPreset(preset);
+      bumpElement(fxPreviewBtn);
+    }
   });
 });
 
-fxResetBtn.addEventListener("click", () => applyFxPreset("clean"));
+fxResetBtn.addEventListener("click", () => {
+  applyFxPreset("clean");
+  bumpElement(fxResetBtn);
+});
 
 fxPreviewBtn.addEventListener("click", () => {
   const targetId = selectedSoundId ?? currentItems[0]?.id;
@@ -1556,6 +1584,8 @@ fxSliders.forEach((slider) => {
     if (def !== undefined) {
       slider.value = def;
       readFxParamsFromControls();
+      const valReadout = slider.parentElement?.querySelector<HTMLElement>(".fx-value");
+      bumpElement(valReadout);
       scheduleFxWaveformUpdate();
     }
   });
