@@ -13,7 +13,7 @@
 [![SQLite](https://img.shields.io/badge/SQLite-Bundled-141416?style=for-the-badge&logo=sqlite&logoColor=ededed)](https://www.sqlite.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-141416?style=for-the-badge)](./LICENSE)
 
-[Features](#-features) · [DSP Pipeline](#-dsp-pipeline) · [Local Library](#-local-library) · [Licenses & Attribution](#-licenses--attribution) · [Responsible Use](#-responsible-use) · [Project Structure](#-project-structure) · [Build & Tests](#-build--run) · [Shortcuts](#-shortcuts)
+[Screenshots](#screenshots) · [Features](#features) · [DSP Pipeline](#dsp-pipeline) · [Local Library](#local-library) · [Licenses & Attribution](#licenses--attribution) · [Responsible Use](#responsible-use) · [Project Structure](#project-structure) · [Build & Run](#build--run) · [Shortcuts](#shortcuts)
 
 </div>
 
@@ -22,7 +22,7 @@
 > [!NOTE]
 > **Works out of the box with zero external FFmpeg or API keys.** A pure-Rust audio engine decodes previews straight into RAM, extracts 64-point RMS envelopes, applies real-time studio FX (including pitch-preserving WSOLA time-stretch), embeds license metadata into exported **24-bit PCM WAV** files, and supports dragging sounds directly onto the timeline of Premiere Pro, DaVinci Resolve, CapCut, or FL Studio.
 
-## 📸 Screenshots
+## Screenshots
 
 <p align="center">
   <img src="./docs/media/main-window.jpg" alt="SFX de Babel main window — 64-point volume envelope, waveform cards, and license badges" width="920" />
@@ -36,7 +36,7 @@ See [`docs/README.md`](./docs/README.md) for the workflow GIF capture checklist 
 
 ---
 
-## ✨ Features
+## Features
 
 | Module | What it does | Stack |
 | :--- | :--- | :--- |
@@ -55,7 +55,7 @@ See [`docs/README.md`](./docs/README.md) for the workflow GIF capture checklist 
 
 ---
 
-## 🔄 DSP Pipeline
+## DSP Pipeline
 
 ```mermaid
 flowchart LR
@@ -85,7 +85,7 @@ flowchart LR
 
 ---
 
-## 🎯 Presets
+## Presets
 
 <details>
 <summary><b>🎚️ One-Click FX Rack &amp; Envelope Scope Presets</b></summary>
@@ -111,7 +111,7 @@ flowchart LR
 
 ---
 
-## 📁 Local Library
+## Local Library
 
 Search your own sound collection by drawn volume envelope and filename/folder tokens without uploading anything:
 
@@ -124,7 +124,7 @@ Search your own sound collection by drawn volume envelope and filename/folder to
 
 ---
 
-## 🏷️ Licenses & Attribution
+## Licenses & Attribution
 
 - **Card Badges & Inline Warnings:** Every result displays a license badge (`Creative Commons 0`, `CC BY`, `CC BY-NC`, `CC Sampling+`, `Mixkit Sound Effects Free License`, `Local file`, or `License unknown`). Sounds that require credit or forbid commercial use show inline `Attribution required` / `No commercial use` indicators directly on the card—no modal dialogs.
 - **WAV `LIST`/`INFO` Metadata:** When exporting or dragging an online sound to WAV, the app writes `INAM` (title), `IART` (author), `ICMT` (license name, license URL, source URL), `ICOP` (license name), and `ISRC` (source URL) into the RIFF `LIST`/`INFO` chunk. For local files (`local`), license fields are omitted because the app makes no licensing claim about files on your disk.
@@ -135,7 +135,7 @@ Search your own sound collection by drawn volume envelope and filename/folder to
 
 ---
 
-## 🌐 Sound Sources & Caching
+## Sound Sources & Caching
 
 - **`Auto` Mode (default):** Uses **Freesound API v2** when an API key is set, falling back to **Mixkit** and **Freesound Web**; without a key, starts with keyless **Mixkit** results and seamlessly continues into **Freesound Web** pages.
 - **Freesound API v2:** Paste your personal token in **Settings** for direct API search with server-side duration and CC0 filtering.
@@ -144,14 +144,14 @@ Search your own sound collection by drawn volume envelope and filename/folder to
 
 ---
 
-## 🛡️ Responsible Use
+## Responsible Use
 
 - **License Compliance:** Users are solely responsible for verifying and respecting the license terms, attribution rules, and platform Terms of Service for every sound they download, modify, or publish. In-app badges, filters, and embedded WAV `LIST`/`INFO` tags mirror source-reported metadata (or `unknown` when unavailable) and do not constitute legal advice or replace checking the original source page.
 - **Polite Network Access:** Keyless HTML providers share per-provider `RateGate` limiters (`≤ 2 requests/sec`, `500 ms` minimum spacing), send an explicit `SFX-de-Babel` desktop `User-Agent`, and handle HTTP `429` with up to `3` attempts using exponential backoff with jitter and `Retry-After` headers. If upstream HTML markup changes, the app surfaces a localized layout-change error instead of failing silently.
 
 ---
 
-## 🧱 Project Structure
+## Project Structure
 
 ```text
 sfxdebabel/
@@ -196,7 +196,7 @@ sfxdebabel/
 
 ---
 
-## 🛠️ Tech Stack
+## Tech Stack
 
 | Layer | Technologies |
 | :--- | :--- |
@@ -208,7 +208,7 @@ sfxdebabel/
 
 ---
 
-## ⚙️ Settings Reference
+## Settings Reference
 
 | Setting | Storage Key | Description |
 | :--- | :--- | :--- |
@@ -221,11 +221,11 @@ sfxdebabel/
 
 ---
 
-## 🚀 Build & Run
+## Build & Run
 
 ### Prerequisites
-- **Rust** (`1.82+`, edition `2021`) + MSVC Build Tools on Windows (or `libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`, `libasound2-dev`, `libgtk-3-dev`, `patchelf` on Ubuntu)
-- **Node.js** `20+` (`18+` supported)
+- **Rust** (`stable`, edition `2021`) + MSVC Build Tools on Windows (or `libwebkit2gtk-4.1-dev`, `libayatana-appindicator3-dev`, `librsvg2-dev`, `libasound2-dev`, `libgtk-3-dev`, `patchelf` on Ubuntu)
+- **Node.js** `20+`
 
 ### Development Mode
 
@@ -245,7 +245,7 @@ npm run tauri dev
 # TypeScript check & frontend bundle
 npm run build
 
-# Rust check & unit tests (44 tests)
+# Rust check & unit tests
 cd src-tauri
 cargo check
 cargo test
@@ -254,7 +254,7 @@ cargo test
 npm run tauri build
 ```
 
-### Automated Test Suite (`44` Rust unit tests)
+### Automated Test Suite
 - **Envelope & Ranking (`audio::envelope`):** 64-point RMS normalization, impulse vs. riser discrimination, ±2-bin shift tolerance, configurable cosine/RMSE weighting, empty input safety.
 - **DSP FX (`audio::fx`):** Stereo reverse ordering, Catmull-Rom pitch+tempo lengths, WSOLA tempo-only lengths (`0.5x–2.0x`) without clipping, WSOLA stereo phase-lock sync, WSOLA pitch preservation (`440 Hz` sine check), biquad LPF attenuation, Freeverb tail upmix, drive/limiter ceiling, and speed-mode filename suffix/clean-state distinction.
 - **WAV Export (`audio::export`):** 16-bit & 24-bit Symphonia roundtrips, RIFF `LIST`/`INFO` (`INAM`, `IART`, `ICMT`, `ICOP`, `ISRC`) roundtrip with odd byte padding, empty-meta skip.
@@ -264,11 +264,11 @@ npm run tauri build
 
 ---
 
-## ⌨️ Shortcuts
+## Shortcuts
 
 | Action | Shortcut / Gesture |
 | :--- | :--- |
-| Focus search bar | <kbd>Ctrl</kbd> + <kbd>K</kbd> / <kbd>Cmd</kbd> + <kbd>K</kbd> |
+| Focus search bar | <kbd>Ctrl</kbd> + <kbd>K</kbd> |
 | Play / Stop preview | <kbd>Space</kbd> |
 | Seek within sound | Click anywhere on a card's mini-waveform |
 | Reset slider (FX / Cosine weight) | Double-click slider |
@@ -276,6 +276,6 @@ npm run tauri build
 
 ---
 
-## 📄 License
+## License
 
 Distributed under the [MIT License](./LICENSE).
