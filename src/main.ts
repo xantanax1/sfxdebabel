@@ -22,6 +22,7 @@ interface AppSettings {
   freesoundApiKey: string;
   providerMode: ProviderMode;
   language: Locale;
+  commercialOnlyNoAttribution: boolean;
 }
 
 interface CacheStats {
@@ -36,6 +37,10 @@ interface SfxItem {
   title: string;
   author: string;
   license: string;
+  licenseName: string;
+  licenseUrl: string;
+  requiresAttribution: boolean;
+  commercialUseAllowed: boolean | null;
   duration: number;
   previewUrl: string;
   sourceUrl: string;
@@ -230,6 +235,7 @@ const apiKeyInput = document.getElementById("input-api-key") as HTMLInputElement
 const toggleKeyBtn = document.getElementById("btn-toggle-key") as HTMLButtonElement;
 const cacheStatsText = document.getElementById("cache-stats-text") as HTMLSpanElement;
 const clearCacheBtn = document.getElementById("btn-clear-cache") as HTMLButtonElement;
+const commercialOnlyInput = document.getElementById("input-commercial-only") as HTMLInputElement;
 
 const minimizeBtn = document.getElementById("btn-minimize") as HTMLButtonElement;
 const closeBtn = document.getElementById("btn-close") as HTMLButtonElement;
@@ -1165,6 +1171,48 @@ function attachCardDragBehavior(card: HTMLElement, item: SfxItem): void {
   });
 }
 
+function licenseDisplayName(item: SfxItem): string {
+  if (item.license === "unknown") return t(currentLocale, "license.unknown");
+  if (item.license === "local") return t(currentLocale, "license.local");
+  return item.licenseName || item.license;
+}
+
+function buildLicenseRow(item: SfxItem): HTMLElement {
+  const row = document.createElement("div");
+  row.className = "sfx-license";
+
+  const badge = document.createElement("span");
+  badge.className = "license-badge";
+  if (item.license === "unknown") badge.classList.add("license-badge--unknown");
+  badge.dataset.license = item.license;
+  badge.textContent = licenseDisplayName(item);
+  badge.title = t(currentLocale, "license.badgeTitle", { name: licenseDisplayName(item) });
+  row.appendChild(badge);
+
+  if (item.requiresAttribution) {
+    const warn = document.createElement("span");
+    warn.className = "license-warn";
+    warn.dataset.warn = "attribution";
+    warn.textContent = `⚠ ${t(currentLocale, "license.warnAttribution")}`;
+    warn.title = t(currentLocale, "license.warnTitleAttribution", { author: item.author });
+    row.appendChild(warn);
+  }
+  if (item.commercialUseAllowed === false) {
+    const warn = document.createElement("span");
+    warn.className = "license-warn license-warn--strong";
+    warn.dataset.warn = "noncommercial";
+    warn.textContent = `⛔ ${t(currentLocale, "license.warnNonCommercial")}`;
+    warn.title = t(currentLocale, "license.warnTitleNonCommercial");
+    row.appendChild(warn);
+  }
+  return row;
+}
+
+function refreshLicenseRow(card: HTMLElement, item: SfxItem): void {
+  const old = card.querySelector(".sfx-license");
+  if (old) old.replaceWith(buildLicenseRow(item));
+}
+
 function createSfxCardElement(item: SfxItem, staggerIndex?: number): HTMLElement {
   const card = document.createElement("article");
   card.className = "sfx-card";
@@ -1214,7 +1262,7 @@ function createSfxCardElement(item: SfxItem, staggerIndex?: number): HTMLElement
   metaText.textContent = `${item.provider} · ${item.author}`;
   metaEl.append(durSpan, metaText);
 
-  info.append(titleRow, metaEl);
+  info.append(titleRow, metaEl, buildLicenseRow(item));
 
   const waveWrap = document.createElement("div");
   waveWrap.className = "wave-wrap";
@@ -1692,6 +1740,8 @@ function setLocale(locale: Locale): void {
 
     const wavBtn = card.querySelector<HTMLButtonElement>(".wav-btn");
     if (wavBtn) wavBtn.title = t(currentLocale, "card.wavTitle");
+
+    refreshLicenseRow(card, item);
   });
 
   if (currentItems.length === 0 && lastSummaryMode === "results") {
@@ -1719,6 +1769,7 @@ async function openSettingsModal(): Promise<void> {
     const settings = await invoke<AppSettings>("get_settings");
     apiKeyInput.value = settings.freesoundApiKey;
     providerModeSelect.value = settings.providerMode;
+    commercialOnlyInput.checked = settings.commercialOnlyNoAttribution;
     savedLocale = normalizeLocale(settings.language);
     languageSelect.value = savedLocale;
     if (currentLocale !== savedLocale) {
@@ -1761,6 +1812,7 @@ saveSettingsBtn.addEventListener("click", async () => {
     freesoundApiKey: apiKeyInput.value.trim(),
     providerMode: providerModeSelect.value as ProviderMode,
     language: chosenLocale,
+    commercialOnlyNoAttribution: commercialOnlyInput.checked,
   };
   try {
     await invoke("save_settings", { settings });
