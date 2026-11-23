@@ -7,6 +7,7 @@ use std::collections::HashSet;
 use async_trait::async_trait;
 
 use crate::error::AppError;
+use crate::license::LicenseInfo;
 
 #[derive(Debug, Clone)]
 pub struct RawSfxCandidate {
@@ -14,7 +15,7 @@ pub struct RawSfxCandidate {
     pub provider: String,
     pub title: String,
     pub author: String,
-    pub license: String,
+    pub license: LicenseInfo,
     pub approx_duration: Option<f32>,
     pub preview_url: String,
     pub source_url: String,
@@ -34,6 +35,8 @@ pub struct ProviderSearchParams {
     pub max_duration: f32,
     pub page: u32,
     pub page_size: usize,
+    /// Ask the source for CC0 sounds only (supported by the official Freesound API).
+    pub cc0_only: bool,
 }
 
 #[async_trait]

@@ -2,6 +2,7 @@ mod audio;
 mod commands;
 mod db;
 mod error;
+mod license;
 mod models;
 mod providers;
 

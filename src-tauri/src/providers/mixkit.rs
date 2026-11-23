@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use scraper::{Html, Selector};
 
 use crate::error::AppError;
+use crate::license::LicenseInfo;
 use crate::providers::{ProviderPage, ProviderSearchParams, RawSfxCandidate, SfxProvider};
 
 #[derive(Default)]
@@ -154,7 +155,7 @@ pub fn parse_mixkit_page(html: &str) -> (Vec<RawSfxCandidate>, bool) {
             provider: "Mixkit".to_string(),
             title,
             author: "Mixkit".to_string(),
-            license: "Mixkit Free License".to_string(),
+            license: LicenseInfo::mixkit_sfx_free(),
             approx_duration,
             preview_url: preview_url.to_string(),
             source_url,

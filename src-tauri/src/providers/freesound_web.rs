@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use scraper::{Html, Selector};
 
 use crate::error::AppError;
+use crate::license::LicenseInfo;
 use crate::providers::{ProviderPage, ProviderSearchParams, RawSfxCandidate, SfxProvider};
 
 /// Keyless public web search provider for Freesound.org.
@@ -79,7 +80,8 @@ pub fn parse_freesound_web_html(html: &str) -> (Vec<RawSfxCandidate>, bool) {
             provider: "Freesound".to_string(),
             title,
             author,
-            license: "Freesound CC".to_string(),
+            // The search listing does not expose the license; do not guess.
+            license: LicenseInfo::unknown(),
             approx_duration,
             preview_url: preview_url.to_string(),
             source_url: format!("https://freesound.org/s/{sound_id}/"),

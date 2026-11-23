@@ -4,6 +4,7 @@ use async_trait::async_trait;
 use serde::Deserialize;
 
 use crate::error::AppError;
+use crate::license::LicenseInfo;
 use crate::providers::{ProviderPage, ProviderSearchParams, RawSfxCandidate, SfxProvider};
 
 pub struct FreesoundProvider {
@@ -28,6 +29,7 @@ struct FreesoundSound {
     name: String,
     duration: f32,
     username: String,
+    #[serde(default)]
     license: String,
     url: String,
     #[serde(default)]
@@ -71,7 +73,10 @@ impl SfxProvider for FreesoundProvider {
 
         let min_d = params.min_duration.max(0.05);
         let max_d = params.max_duration.max(min_d + 0.1);
-        let duration_filter = format!("duration:[{min_d:.2} TO {max_d:.2}]");
+        let mut duration_filter = format!("duration:[{min_d:.2} TO {max_d:.2}]");
+        if params.cc0_only {
+            duration_filter.push_str(" license:\"Creative Commons 0\"");
+        }
         let page_size = params.page_size.clamp(1, 50).to_string();
         let page = params.page.max(1).to_string();
 
@@ -117,7 +122,7 @@ impl SfxProvider for FreesoundProvider {
                 provider: "Freesound".to_string(),
                 title: s.name,
                 author: s.username,
-                license: s.license,
+                license: LicenseInfo::from_freesound_license(&s.license),
                 approx_duration: Some(s.duration),
                 preview_url,
                 source_url: s.url,

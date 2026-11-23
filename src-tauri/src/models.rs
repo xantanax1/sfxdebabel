@@ -31,6 +31,9 @@ pub struct AppSettings {
     pub provider_mode: ProviderMode,
     #[serde(default)]
     pub language: Language,
+    /// Keep only sounds positively known to be usable commercially without attribution.
+    #[serde(default)]
+    pub commercial_only_no_attribution: bool,
 }
 
 impl Default for AppSettings {
@@ -39,6 +42,7 @@ impl Default for AppSettings {
             freesound_api_key: String::new(),
             provider_mode: ProviderMode::Auto,
             language: Language::Ru,
+            commercial_only_no_attribution: false,
         }
     }
 }
@@ -69,7 +73,12 @@ pub struct SfxItem {
     pub provider: String,
     pub title: String,
     pub author: String,
+    /// License id (`cc0`, `cc-by`, `mixkit-sfx-free`, `unknown`, `local`, ...).
     pub license: String,
+    pub license_name: String,
+    pub license_url: String,
+    pub requires_attribution: bool,
+    pub commercial_use_allowed: Option<bool>,
     pub duration: f32,
     pub preview_url: String,
     pub source_url: String,

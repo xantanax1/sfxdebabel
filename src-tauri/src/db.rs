@@ -6,11 +6,13 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use rusqlite::{params, Connection};
 
 use crate::error::AppError;
+use crate::license::LicenseInfo;
 use crate::models::{AppSettings, CacheStats, Language, ProviderMode};
 
 const KEY_FREESOUND_API: &str = "freesound_api_key";
 const KEY_PROVIDER_MODE: &str = "provider_mode";
 const KEY_LANGUAGE: &str = "language";
+const KEY_COMMERCIAL_ONLY: &str = "commercial_only_no_attribution";
 
 #[derive(Debug, Clone)]
 pub struct CachedSfx {
@@ -18,12 +20,37 @@ pub struct CachedSfx {
     pub provider: String,
     pub title: String,
     pub author: String,
-    pub license: String,
+    pub license: LicenseInfo,
     pub duration: f32,
     pub preview_url: String,
     pub source_url: String,
     pub tags: Vec<String>,
     pub envelope: Vec<f32>,
+}
+
+/// Adds the license columns to pre-existing `sfx_cache` tables without touching old rows.
+/// Legacy rows keep `license_name = NULL` and are re-mapped conservatively on read.
+fn migrate_license_columns(conn: &Connection) -> Result<(), AppError> {
+    let mut existing = std::collections::HashSet::new();
+    {
+        let mut stmt = conn.prepare("PRAGMA table_info(sfx_cache)")?;
+        let names = stmt.query_map([], |row| row.get::<_, String>(1))?;
+        for n in names {
+            existing.insert(n?);
+        }
+    }
+    let additions = [
+        ("license_name", "TEXT"),
+        ("license_url", "TEXT"),
+        ("requires_attribution", "INTEGER"),
+        ("commercial_use_allowed", "INTEGER"),
+    ];
+    for (col, ty) in additions {
+        if !existing.contains(col) {
+            conn.execute_batch(&format!("ALTER TABLE sfx_cache ADD COLUMN {col} {ty};"))?;
+        }
+    }
+    Ok(())
 }
 
 pub struct Database {
@@ -61,6 +88,7 @@ impl Database {
             CREATE INDEX IF NOT EXISTS idx_sfx_cache_cached_at ON sfx_cache(cached_at);
             ",
         )?;
+        migrate_license_columns(&conn)?;
 
         Ok(Self {
             conn: Mutex::new(conn),
@@ -93,6 +121,7 @@ impl Database {
                         _ => ProviderMode::Auto,
                     };
                 }
+                KEY_COMMERCIAL_ONLY => settings.commercial_only_no_attribution = v == "1",
                 KEY_LANGUAGE => {
                     settings.language = match v.as_str() {
                         "en" => Language::En,
@@ -142,6 +171,14 @@ impl Database {
              ON CONFLICT(key) DO UPDATE SET value = excluded.value",
             params![KEY_LANGUAGE, lang_str],
         )?;
+        tx.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![
+                KEY_COMMERCIAL_ONLY,
+                if settings.commercial_only_no_attribution { "1" } else { "0" }
+            ],
+        )?;
         tx.commit()?;
         Ok(())
     }
@@ -161,7 +198,8 @@ impl Database {
             .collect::<Vec<_>>()
             .join(", ");
         let sql = format!(
-            "SELECT id, provider, title, author, license, duration, preview_url, source_url, tags_json, envelope_json
+            "SELECT id, provider, title, author, license, duration, preview_url, source_url, tags_json, envelope_json,
+                    license_name, license_url, requires_attribution, commercial_use_allowed
              FROM sfx_cache WHERE id IN ({placeholders})"
         );
         let mut stmt = conn.prepare(&sql)?;
@@ -180,6 +218,10 @@ impl Database {
                 row.get::<_, String>(7)?,
                 row.get::<_, String>(8)?,
                 row.get::<_, String>(9)?,
+                row.get::<_, Option<String>>(10)?,
+                row.get::<_, Option<String>>(11)?,
+                row.get::<_, Option<i64>>(12)?,
+                row.get::<_, Option<i64>>(13)?,
             ))
         })?;
 
@@ -195,7 +237,22 @@ impl Database {
                 source_url,
                 tags_json,
                 envelope_json,
+                license_name,
+                license_url,
+                requires_attribution,
+                commercial_use_allowed,
             ) = row?;
+
+            let license = match license_name {
+                Some(name) => LicenseInfo {
+                    id: license,
+                    name,
+                    url: license_url.unwrap_or_default(),
+                    requires_attribution: requires_attribution.unwrap_or(0) != 0,
+                    commercial_use_allowed: commercial_use_allowed.map(|v| v != 0),
+                },
+                None => LicenseInfo::from_legacy(&provider, &license),
+            };
 
             let tags: Vec<String> = serde_json::from_str(&tags_json).unwrap_or_default();
             let envelope: Vec<f32> = serde_json::from_str(&envelope_json).unwrap_or_default();
@@ -242,8 +299,9 @@ impl Database {
             let mut stmt = tx.prepare(
                 "INSERT INTO sfx_cache (
                     id, provider, title, author, license, duration,
-                    preview_url, source_url, tags_json, envelope_json, cached_at
-                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)
+                    preview_url, source_url, tags_json, envelope_json, cached_at,
+                    license_name, license_url, requires_attribution, commercial_use_allowed
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)
                 ON CONFLICT(id) DO UPDATE SET
                     provider = excluded.provider,
                     title = excluded.title,
@@ -254,7 +312,11 @@ impl Database {
                     source_url = excluded.source_url,
                     tags_json = excluded.tags_json,
                     envelope_json = excluded.envelope_json,
-                    cached_at = excluded.cached_at",
+                    cached_at = excluded.cached_at,
+                    license_name = excluded.license_name,
+                    license_url = excluded.license_url,
+                    requires_attribution = excluded.requires_attribution,
+                    commercial_use_allowed = excluded.commercial_use_allowed",
             )?;
 
             for item in items {
@@ -265,13 +327,17 @@ impl Database {
                     item.provider,
                     item.title,
                     item.author,
-                    item.license,
+                    item.license.id,
                     item.duration as f64,
                     item.preview_url,
                     item.source_url,
                     tags_json,
                     envelope_json,
                     now,
+                    item.license.name,
+                    item.license.url,
+                    i64::from(item.license.requires_attribution),
+                    item.license.commercial_use_allowed.map(i64::from),
                 ])?;
             }
         }
@@ -342,5 +408,66 @@ impl Database {
             temp_wav_count,
             db_size_bytes,
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn item(id: &str, license: LicenseInfo) -> CachedSfx {
+        CachedSfx {
+            id: id.to_string(),
+            provider: "Freesound".to_string(),
+            title: "t".to_string(),
+            author: "a".to_string(),
+            license,
+            duration: 1.0,
+            preview_url: "u".to_string(),
+            source_url: "s".to_string(),
+            tags: vec![],
+            envelope: vec![0.5; 64],
+        }
+    }
+
+    #[test]
+    fn migrates_legacy_cache_without_losing_rows_and_roundtrips_license() {
+        let dir = std::env::temp_dir().join("sfx_de_babel_db_migration_test");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Old schema + old rows.
+        {
+            let conn = Connection::open(dir.join("sfx_de_babel.db")).unwrap();
+            conn.execute_batch(
+                "CREATE TABLE sfx_cache (
+                    id TEXT PRIMARY KEY, provider TEXT NOT NULL, title TEXT NOT NULL,
+                    author TEXT NOT NULL, license TEXT NOT NULL, duration REAL NOT NULL,
+                    preview_url TEXT NOT NULL, source_url TEXT NOT NULL,
+                    tags_json TEXT NOT NULL, envelope_json TEXT NOT NULL, cached_at INTEGER NOT NULL
+                );
+                INSERT INTO sfx_cache VALUES
+                  ('mk_1','Mixkit','a','Mixkit','Mixkit Free License',1.0,'u','s','[]','[0.5]',0),
+                  ('fsw_2','Freesound','b','x','Freesound CC',1.0,'u','s','[]','[0.5]',0);",
+            )
+            .unwrap();
+        }
+
+        let db = Database::open(&dir).unwrap();
+        let got = db
+            .get_cached_batch(&["mk_1".to_string(), "fsw_2".to_string()])
+            .unwrap();
+        assert_eq!(got["mk_1"].license.id, "mixkit-sfx-free");
+        assert_eq!(got["fsw_2"].license.id, "unknown");
+
+        let by = LicenseInfo::from_freesound_license("https://creativecommons.org/licenses/by/4.0/");
+        db.upsert_cached(&[item("fs_3", by.clone())]).unwrap();
+        let got = db.get_cached_batch(&["fs_3".to_string()]).unwrap();
+        assert_eq!(got["fs_3"].license, by);
+
+        // Reopening is idempotent.
+        drop(db);
+        Database::open(&dir).unwrap();
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }

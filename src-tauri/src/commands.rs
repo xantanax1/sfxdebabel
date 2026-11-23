@@ -11,11 +11,12 @@ use crate::audio::decoder::{decode_audio_bytes, DecodedAudio};
 use crate::audio::envelope::{
     compute_rms_envelope, compute_similarity, normalize_envelope, process_batch_parallel,
 };
-use crate::audio::export::{export_temp_dir, export_to_wav, export_to_wav_24bit};
+use crate::audio::export::{export_temp_dir, export_to_wav, export_to_wav_24bit, ExportMeta};
 use crate::audio::fx::{AudioBuffer, FxChain, FxParams};
 use crate::audio::player::AudioPlayer;
 use crate::db::{CachedSfx, Database};
 use crate::error::AppError;
+use crate::license::LicenseInfo;
 use crate::models::{
     AppSettings, CacheStats, FxWaveformResult, PlaybackStatus, ProviderMode, SearchRequest,
     SearchResponse, SfxItem,
@@ -55,6 +56,21 @@ impl SearchCursor {
 struct SoundMeta {
     title: String,
     preview_url: String,
+    author: String,
+    license: LicenseInfo,
+    source_url: String,
+}
+
+impl SoundMeta {
+    fn export_meta(&self) -> ExportMeta {
+        ExportMeta {
+            title: self.title.clone(),
+            author: self.author.clone(),
+            license_name: self.license.name.clone(),
+            license_url: self.license.url.clone(),
+            source_url: self.source_url.clone(),
+        }
+    }
 }
 
 struct AudioRamCache {
@@ -170,7 +186,7 @@ impl AppState {
     async fn resolve_audio_and_title(
         &self,
         sound_id: &str,
-    ) -> Result<(Arc<DecodedAudio>, String), AppError> {
+    ) -> Result<(Arc<DecodedAudio>, SoundMeta), AppError> {
         let meta_from_ram = {
             let guard = self.sound_meta.read().await;
             guard.get(sound_id).cloned()
@@ -184,6 +200,9 @@ impl AppState {
                 let m = SoundMeta {
                     title: cached.title.clone(),
                     preview_url: cached.preview_url.clone(),
+                    author: cached.author.clone(),
+                    license: cached.license.clone(),
+                    source_url: cached.source_url.clone(),
                 };
                 let mut guard = self.sound_meta.write().await;
                 guard.insert(sound_id.to_string(), m.clone());
@@ -192,7 +211,16 @@ impl AppState {
                 // If audio is already in LRU cache without metadata, fall back to sound_id as title.
                 let mut ram_guard = self.audio_cache.write().await;
                 if let Some(audio) = ram_guard.touch_lru(sound_id) {
-                    return Ok((audio, sound_id.to_string()));
+                    return Ok((
+                        audio,
+                        SoundMeta {
+                            title: sound_id.to_string(),
+                            preview_url: String::new(),
+                            author: String::new(),
+                            license: LicenseInfo::unknown(),
+                            source_url: String::new(),
+                        },
+                    ));
                 }
                 return Err(AppError::InvalidInput(format!(
                     "Звук {sound_id} не найден. Выполните поиск заново."
@@ -201,7 +229,7 @@ impl AppState {
         };
 
         let audio = self.ensure_decoded(sound_id, &meta.preview_url).await?;
-        Ok((audio, meta.title))
+        Ok((audio, meta))
     }
 }
 
@@ -282,6 +310,7 @@ pub async fn search_sfx(
             max_duration,
             page: page_num,
             page_size: DEFAULT_PAGE_SIZE,
+            cc0_only: settings.commercial_only_no_attribution,
         };
 
         match resolved_cursor {
@@ -333,6 +362,7 @@ pub async fn search_sfx(
             max_duration,
             page: 1,
             page_size: DEFAULT_PAGE_SIZE,
+            cc0_only: settings.commercial_only_no_attribution,
         };
 
         match settings.provider_mode {
@@ -436,7 +466,12 @@ pub async fn search_sfx(
             .then(|| format!("fs_web:{}", n + 1)),
     };
 
-    let candidates = page_result.candidates;
+    let mut candidates = page_result.candidates;
+    if settings.commercial_only_no_attribution {
+        // Keep only sounds positively known to be usable commercially without credit.
+        // Unknown licenses are excluded: we never guess.
+        candidates.retain(|c| c.license.is_commercial_no_attribution());
+    }
     if candidates.is_empty() {
         return Ok(SearchResponse {
             items: Vec::new(),
@@ -523,6 +558,9 @@ pub async fn search_sfx(
                 SoundMeta {
                     title: cand.title.clone(),
                     preview_url: cand.preview_url.clone(),
+                    author: cand.author.clone(),
+                    license: cand.license.clone(),
+                    source_url: cand.source_url.clone(),
                 },
             );
 
@@ -535,7 +573,11 @@ pub async fn search_sfx(
                 provider: cand.provider,
                 title: cand.title,
                 author: cand.author,
-                license: cand.license,
+                license: cand.license.id,
+                license_name: cand.license.name,
+                license_url: cand.license.url,
+                requires_attribution: cand.license.requires_attribution,
+                commercial_use_allowed: cand.license.commercial_use_allowed,
                 duration,
                 preview_url: cand.preview_url,
                 source_url: cand.source_url,
@@ -683,6 +725,9 @@ pub async fn prepare_drag_wav(
             SoundMeta {
                 title: title.clone(),
                 preview_url: preview_url.clone(),
+                author: String::new(),
+                license: LicenseInfo::unknown(),
+                source_url: String::new(),
             },
         );
     }
@@ -692,7 +737,7 @@ pub async fn prepare_drag_wav(
         .await
         .map_err(String::from)?;
 
-    let path = tokio::task::spawn_blocking(move || export_to_wav(&sound_id, &title, &audio))
+    let path = tokio::task::spawn_blocking(move || export_to_wav(&sound_id, &title, &audio, None))
         .await
         .map_err(|e| format!("Ошибка потока экспорта WAV: {e}"))?
         .map_err(String::from)?;
@@ -706,7 +751,7 @@ pub async fn prepare_drag_file(
     sound_id: String,
     fx: FxParams,
 ) -> Result<String, String> {
-    let (original, title) = state
+    let (original, meta) = state
         .resolve_audio_and_title(&sound_id)
         .await
         .map_err(String::from)?;
@@ -716,7 +761,8 @@ pub async fn prepare_drag_file(
         let fx_buf = FxChain::process(&raw_buf, &fx);
         let processed = fx_buf.to_decoded();
         let suffix = fx.filename_suffix();
-        export_to_wav_24bit(&sound_id, &title, &suffix, &processed)
+        let export_meta = meta.export_meta();
+        export_to_wav_24bit(&sound_id, &meta.title, &suffix, &processed, Some(&export_meta))
     })
     .await
     .map_err(|e| format!("Ошибка потока экспорта 24-bit WAV: {e}"))?
