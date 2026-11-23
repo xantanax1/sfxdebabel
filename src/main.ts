@@ -6,6 +6,13 @@ import {
   t,
   type Locale,
 } from "./i18n";
+import {
+  bindScopeParallax,
+  bindScrollGlass,
+  bindSpecularSurface,
+  bindTiltParallax,
+  type ScopeParallaxHandle,
+} from "./spring";
 
 const ENVELOPE_POINTS = 64;
 
@@ -132,6 +139,8 @@ scrollSentinel.className = "load-more-row";
 const appWindow = getCurrentWindow();
 type WindowResizeDirection = Parameters<typeof appWindow.startResizeDragging>[0];
 
+const appShell = document.querySelector(".app-shell") as HTMLDivElement;
+const scopePanel = document.querySelector(".scope-panel") as HTMLElement;
 const resizeHandles = Array.from(document.querySelectorAll<HTMLElement>(".resize-handle[data-resize]"));
 const navItems = Array.from(document.querySelectorAll<HTMLButtonElement>(".nav-item[data-query]"));
 const presetButtons = Array.from(
@@ -210,6 +219,7 @@ const fxSliders = [
 
 // Settings modal references
 const settingsModal = document.getElementById("settings-modal") as HTMLDivElement;
+const studioModal = settingsModal.querySelector(".studio-modal") as HTMLDivElement;
 const openSettingsBtn = document.getElementById("btn-open-settings") as HTMLButtonElement;
 const closeSettingsBtn = document.getElementById("btn-close-settings") as HTMLButtonElement;
 const cancelSettingsBtn = document.getElementById("btn-cancel-settings") as HTMLButtonElement;
@@ -225,11 +235,14 @@ const minimizeBtn = document.getElementById("btn-minimize") as HTMLButtonElement
 const closeBtn = document.getElementById("btn-close") as HTMLButtonElement;
 const toastContainer = document.getElementById("toast-container") as HTMLDivElement;
 
+let scopeParallax: ScopeParallaxHandle | null = null;
+
 function bumpElement(el: HTMLElement | null | undefined): void {
   if (!el) return;
   el.classList.remove("is-bumped");
   void el.offsetWidth;
   el.classList.add("is-bumped");
+  el.addEventListener("animationend", () => el.classList.remove("is-bumped"), { once: true });
 }
 
 function showToast(message: string): void {
@@ -470,6 +483,16 @@ function renderEnvelopeCanvas(): void {
   const plotW = Math.max(20, width - padLeft - padRight);
   const plotH = Math.max(16, height - padTop - padBottom);
 
+  const parallax = scopeParallax ? scopeParallax.getOffset() : { x: 0, y: 0 };
+  const gridDx = parallax.x * -3.5;
+  const gridDy = parallax.y * -2.2;
+  const refDx = parallax.x * 1.4;
+  const refDy = parallax.y * 0.9;
+  const fgDx = parallax.x * 2.6;
+  const fgDy = parallax.y * 1.6;
+
+  ctx.save();
+  ctx.translate(gridDx, gridDy);
   ctx.strokeStyle = "rgba(237, 237, 237, 0.05)";
   ctx.lineWidth = 1;
   for (let gx = 0; gx <= 4; gx++) {
@@ -502,6 +525,7 @@ function renderEnvelopeCanvas(): void {
   ctx.fillText("50%", padLeft + plotW * 0.5, height - 4);
   ctx.textAlign = "right";
   ctx.fillText("100%", padLeft + plotW, height - 4);
+  ctx.restore();
 
   const refId = playback.soundId ?? selectedSoundId;
   const activeItem = refId ? currentItems.find((item) => item.id === refId) : undefined;
@@ -511,6 +535,7 @@ function renderEnvelopeCanvas(): void {
       y: padTop + (1 - Math.max(0, Math.min(1, v))) * plotH,
     }));
     ctx.save();
+    ctx.translate(refDx, refDy);
     ctx.setLineDash([3, 3]);
     drawSmoothCurvePath(ctx, refPts);
     ctx.strokeStyle = "rgba(161, 161, 166, 0.36)";
@@ -539,6 +564,8 @@ function renderEnvelopeCanvas(): void {
     y: padTop + (1 - Math.max(0, Math.min(1, v))) * plotH,
   }));
 
+  ctx.save();
+  ctx.translate(fgDx, fgDy);
   const baseY = padTop + plotH;
   const grad = ctx.createLinearGradient(0, padTop, 0, baseY);
   grad.addColorStop(0, "rgba(237, 237, 237, 0.14)");
@@ -564,6 +591,7 @@ function renderEnvelopeCanvas(): void {
   ctx.lineCap = "round";
   ctx.lineJoin = "round";
   ctx.stroke();
+  ctx.restore();
 }
 
 function updateLiveMatchScores(): void {
@@ -1143,7 +1171,7 @@ function createSfxCardElement(item: SfxItem, staggerIndex?: number): HTMLElement
   card.dataset.soundId = item.id;
   if (staggerIndex !== undefined) {
     card.classList.add("sfx-card--enter");
-    card.style.setProperty("--enter-delay", `${Math.min(staggerIndex, 10) * 24}ms`);
+    card.style.setProperty("--enter-delay", `${Math.min(staggerIndex, 8) * 18}ms`);
     card.addEventListener(
       "animationend",
       () => {
@@ -1233,6 +1261,15 @@ function createSfxCardElement(item: SfxItem, staggerIndex?: number): HTMLElement
 
   card.append(playBtn, info, waveWrap, actions);
   attachCardDragBehavior(card, item);
+  bindSpecularSurface(card, { maxOpacity: 0.9 });
+  bindTiltParallax(card, {
+    maxRotateX: 1.5,
+    maxRotateY: 0.7,
+    liftZ: 4,
+    pressZ: 0,
+    parallaxPx: 3.0,
+    flattenOnPress: true,
+  });
   return card;
 }
 
@@ -1691,11 +1728,13 @@ async function openSettingsModal(): Promise<void> {
     showToast(String(err));
   }
   await refreshCacheStats();
+  appShell.classList.add("modal-open");
   settingsModal.classList.remove("hidden");
 }
 
 function closeSettingsModal(revertLanguage = true): void {
   settingsModal.classList.add("hidden");
+  appShell.classList.remove("modal-open");
   if (revertLanguage && currentLocale !== savedLocale) {
     setLocale(savedLocale);
     languageSelect.value = savedLocale;
@@ -1812,7 +1851,52 @@ window.addEventListener("resize", () => {
 });
 
 // Initialization
+function initVisualPhysics(): void {
+  document.querySelectorAll<HTMLElement>(".glass-specular").forEach((el) => {
+    bindSpecularSurface(el);
+  });
+
+  bindTiltParallax(scopePanel, {
+    maxRotateX: 1.0,
+    maxRotateY: 0.65,
+    liftZ: 3,
+    pressZ: 0,
+    parallaxPx: 3.5,
+    flattenOnPress: true,
+  });
+
+  bindTiltParallax(studioModal, {
+    maxRotateX: 1.1,
+    maxRotateY: 0.85,
+    liftZ: 4,
+    pressZ: 0,
+    parallaxPx: 2.5,
+    flattenOnPress: true,
+  });
+
+  bindScrollGlass(resultsList, appShell);
+  scopeParallax = bindScopeParallax(envelopeCanvas, () => renderEnvelopeCanvas());
+
+  window.addEventListener("blur", () => appShell.classList.add("is-unfocused"));
+  window.addEventListener("focus", () => appShell.classList.remove("is-unfocused"));
+
+  void appWindow
+    .onFocusChanged(({ payload: focused }) => {
+      appShell.classList.toggle("is-unfocused", !focused);
+    })
+    .catch(() => {});
+
+  void appWindow
+    .isFocused()
+    .then((focused) => {
+      appShell.classList.toggle("is-unfocused", !focused);
+    })
+    .catch(() => {});
+}
+
 async function init(): Promise<void> {
+  initVisualPhysics();
+
   try {
     const settings = await invoke<AppSettings>("get_settings");
     savedLocale = normalizeLocale(settings.language);
