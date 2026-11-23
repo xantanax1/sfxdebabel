@@ -22,7 +22,17 @@
 > [!NOTE]
 > **Works out of the box with zero external FFmpeg or API keys.** A pure-Rust audio engine decodes previews straight into RAM, extracts 64-point RMS envelopes, applies real-time studio FX (including pitch-preserving WSOLA time-stretch), embeds license metadata into exported **24-bit PCM WAV** files, and supports dragging sounds directly onto the timeline of Premiere Pro, DaVinci Resolve, CapCut, or FL Studio.
 
-See [`docs/README.md`](./docs/README.md) for the screenshot & GIF capture checklist (currently tracked with explicit `TODO` placeholders).
+## 📸 Screenshots
+
+<p align="center">
+  <img src="./docs/media/main-window.jpg" alt="SFX de Babel main window — 64-point volume envelope, waveform cards, and license badges" width="920" />
+</p>
+
+| FX Rack (`Tempo only` WSOLA & DSP) | Sources, Local Library & Commercial Filter |
+| :---: | :---: |
+| <img src="./docs/media/fx-rack-tempo-only.png" alt="SFX de Babel FX Rack with Tempo only mode" height="440" /> | <img src="./docs/media/settings-local-library.png" alt="SFX de Babel Settings — Local Library, Cosine weight, Commercial filter" height="440" /> |
+
+See [`docs/README.md`](./docs/README.md) for the workflow GIF capture checklist (`TODO`).
 
 ---
 

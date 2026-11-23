@@ -9,17 +9,24 @@ This folder is reserved for real UI screenshots and short workflow GIFs/WebMs re
 - **Video / GIF:** Record at `30 fps`, keep GIFs under `10 MB` (e.g., `ffmpeg` palettegen or ScreenToGif).
 - **Suggested asset folder:** Save final files under `docs/media/` (e.g., `docs/media/envelope-drawing.gif`).
 
+## Captured Screenshots
+
+- [Main Window — Envelope Scope, Results & License Badges](./media/main-window.jpg)
+- [FX Rack — `Tempo only` (WSOLA) & DSP Chain](./media/fx-rack-tempo-only.png)
+- [Settings — Local Library, Cosine/RMSE Weight & Commercial Filter](./media/settings-local-library.png)
+
 ## Planned Captures
 
 ### 1. Drawing an Envelope Contour & Live Re-ranking (`envelope-drawing.gif`)
-- **TODO:** Capture `docs/media/envelope-drawing.gif`
+- **TODO:** Capture `docs/media/envelope-drawing.gif` (static view captured in `main-window.jpg`)
 - **What to show:**
   1. Start with a search query (e.g. `whoosh` or `impact`) and results loaded.
   2. Draw a custom curve on the **Volume Envelope** canvas (or click one of the sidebar presets, then tweak it by hand).
   3. Capture cards re-sorting live with updated percentage match badges and clicking play on the top result.
 
 ### 2. FX Rack & `Tempo only` vs `Pitch + tempo` (`fx-rack-tempo-only.gif`)
-- **TODO:** Capture `docs/media/fx-rack-tempo-only.gif` (plus optional `docs/media/fx-rack.png`)
+- **Captured:** [`docs/media/fx-rack-tempo-only.png`](./media/fx-rack-tempo-only.png)
+- **TODO:** Capture animated `docs/media/fx-rack-tempo-only.gif`
 - **What to show:**
   1. Select a sound card and open the right **FX Rack** panel.
   2. Move the **Speed / Pitch** slider (e.g. to `0.70x` or `1.45x`) in `Pitch + tempo` mode, watching the card waveform and duration update.
@@ -33,13 +40,11 @@ This folder is reserved for real UI screenshots and short workflow GIFs/WebMs re
   3. Show the drop succeeding and (optionally) a quick inset/crop inspecting the exported WAV's `LIST`/`INFO` tags (`INAM`, `IART`, `ICMT`, `ICOP`, `ISRC`).
 
 ### 4. License Badges, Warnings & Commercial-Only Filter (`license-badges.png`)
-- **TODO:** Capture `docs/media/license-badges.png`
-- **What to show:**
-  1. A search result list containing a mix of licenses (e.g., `Creative Commons 0`, `CC BY 4.0` with `⚠ Attribution required`, `CC BY-NC` with `⛔ No commercial use`, `Mixkit Sound Effects Free License`, or `License unknown`).
-  2. Optionally show the **Settings** toggle `Only sounds cleared for commercial use without attribution` enabled/disabled.
+- **Captured:** visible in [`docs/media/main-window.jpg`](./media/main-window.jpg) (`CC BY-NC 4.0`, `Attribution required`, `No commercial use`) and [`docs/media/settings-local-library.png`](./media/settings-local-library.png) (commercial-only toggle)
 
 ### 5. Local Library Indexing & Envelope Search (`local-library-indexing.png`)
-- **TODO:** Capture `docs/media/local-library-indexing.png`
+- **Captured:** [`docs/media/settings-local-library.png`](./media/settings-local-library.png)
+- **TODO:** Capture `docs/media/local-library-indexing.gif` showing the live progress bar + `Cancel` button during indexing, plus `Local` results.
 - **What to show:**
   1. Open **Settings** showing a selected folder path, the active **progress bar** (`Indexing X / Y`) + **Cancel** button, the **Envelope match: shape vs. level** slider (`65%`), and **Sound source** set to **Local library only**.
   2. Optionally include a second shot (`docs/media/local-library-results.png`) showing `Local` cards with the `Local file` badge and `LIBRARY_RANGE_RELAXED` banner when triggered.
