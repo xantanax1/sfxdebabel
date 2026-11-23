@@ -826,6 +826,12 @@ input::placeholder {
   transform: scale(0.97);
 }
 
+.ghost-btn:disabled {
+  opacity: 0.45;
+  cursor: default;
+  pointer-events: none;
+}
+
 .topbar-drag-spacer {
   flex: 1;
   height: 100%;
@@ -1429,8 +1435,11 @@ input::placeholder {
 
 .studio-modal {
   position: relative;
-  width: 448px;
+  width: 480px;
   max-width: calc(100% - 32px);
+  max-height: calc(100vh - 32px);
+  display: flex;
+  flex-direction: column;
   border-radius: var(--radius-window);
   background: rgba(20, 20, 23, 0.80);
   backdrop-filter: blur(28px) saturate(160%);
@@ -1446,6 +1455,7 @@ input::placeholder {
 
 .modal-header,
 .modal-footer {
+  flex-shrink: 0;
   padding: 16px 20px;
   display: flex;
   align-items: center;
@@ -1467,10 +1477,26 @@ input::placeholder {
 }
 
 .modal-body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
   padding: 20px;
   display: flex;
   flex-direction: column;
   gap: 16px;
+}
+
+.modal-body::-webkit-scrollbar {
+  width: 4px;
+}
+
+.modal-body::-webkit-scrollbar-thumb {
+  background: rgba(237, 237, 237, 0.14);
+  border-radius: 4px;
+}
+
+.modal-body::-webkit-scrollbar-thumb:hover {
+  background: rgba(237, 237, 237, 0.24);
 }
 
 .field {
@@ -1541,6 +1567,97 @@ input::placeholder {
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   color: var(--text-secondary);
+}
+
+/* Local Library Controls in Settings */
+@keyframes progress-sweep {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+.library-box {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 12px;
+  border-radius: var(--radius-row);
+  background: var(--bg-card);
+  border: 1px solid var(--hairline);
+}
+
+.library-path-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.library-path {
+  flex: 1;
+  min-width: 0;
+  height: 32px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  border-radius: var(--radius-control);
+  background: var(--bg-well);
+  border: 1px solid var(--hairline);
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.library-path.is-empty {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.library-actions-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.library-btn-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.library-progress-wrap {
+  width: 100%;
+}
+
+.library-progress-track {
+  position: relative;
+  width: 100%;
+  height: 4px;
+  border-radius: 4px;
+  background: rgba(237, 237, 237, 0.12);
+  overflow: hidden;
+}
+
+.library-progress-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 4px;
+  background: var(--text-primary);
+  transition: width 160ms var(--ease);
+}
+
+.library-progress-fill.is-indeterminate {
+  width: 35%;
+  animation: progress-sweep 1.2s var(--ease-smooth) infinite;
 }
 
 /* Toasts */

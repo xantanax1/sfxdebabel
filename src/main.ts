@@ -1,4 +1,5 @@
 import { Channel, invoke } from "@tauri-apps/api/core";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
   applyDomTranslations,
@@ -16,13 +17,42 @@ import {
 
 const ENVELOPE_POINTS = 64;
 
-type ProviderMode = "auto" | "freesound" | "mixkit";
+type ProviderMode = "auto" | "freesound" | "mixkit" | "library";
 
 interface AppSettings {
   freesoundApiKey: string;
   providerMode: ProviderMode;
   language: Locale;
   commercialOnlyNoAttribution: boolean;
+  libraryDir: string;
+  cosineWeight: number;
+}
+
+interface LibraryStatus {
+  dir: string;
+  indexedCount: number;
+  indexing: boolean;
+}
+
+interface LibraryProgressPayload {
+  phase: "scanning" | "indexing" | "done" | "cancelled";
+  total: number;
+  processed: number;
+  failed: number;
+}
+
+interface LibraryIndexSummary {
+  total: number;
+  indexed: number;
+  unchanged: number;
+  failed: number;
+  removed: number;
+  cancelled: boolean;
+}
+
+interface LibraryIndexDonePayload {
+  summary: LibraryIndexSummary | null;
+  error: string | null;
 }
 
 interface CacheStats {
@@ -109,6 +139,20 @@ let currentItems: SfxItem[] = [];
 let currentProvider = "Mixkit";
 let currentLocale: Locale = "ru";
 let savedLocale: Locale = "ru";
+let currentCosineWeight = 0.65;
+let draftLibraryDir = "";
+let isLibraryIndexing = false;
+let lastLibraryIndexedCount = 0;
+
+type LibraryStatusState =
+  | { kind: "idle" }
+  | { kind: "scanning" }
+  | { kind: "progress"; done: number; total: number }
+  | { kind: "done"; summary: LibraryIndexSummary }
+  | { kind: "cancelled" }
+  | { kind: "error"; message: string };
+
+let lastLibraryStatusState: LibraryStatusState = { kind: "idle" };
 let lastSummaryMode: "ready" | "searching" | "results" | "error" = "ready";
 let lastCacheEntryCount = 0;
 let lastCacheStats: CacheStats | null = null;
@@ -236,6 +280,15 @@ const toggleKeyBtn = document.getElementById("btn-toggle-key") as HTMLButtonElem
 const cacheStatsText = document.getElementById("cache-stats-text") as HTMLSpanElement;
 const clearCacheBtn = document.getElementById("btn-clear-cache") as HTMLButtonElement;
 const commercialOnlyInput = document.getElementById("input-commercial-only") as HTMLInputElement;
+const libraryDirText = document.getElementById("library-dir-text") as HTMLSpanElement;
+const pickLibraryBtn = document.getElementById("btn-pick-library") as HTMLButtonElement;
+const indexLibraryBtn = document.getElementById("btn-index-library") as HTMLButtonElement;
+const cancelLibraryBtn = document.getElementById("btn-cancel-library") as HTMLButtonElement;
+const libraryStatusText = document.getElementById("library-status-text") as HTMLSpanElement;
+const libraryProgressWrap = document.getElementById("library-progress-wrap") as HTMLDivElement;
+const libraryProgressFill = document.getElementById("library-progress-fill") as HTMLDivElement;
+const cosineWeightInput = document.getElementById("input-cosine-weight") as HTMLInputElement;
+const valCosineWeight = document.getElementById("val-cosine-weight") as HTMLSpanElement;
 
 const minimizeBtn = document.getElementById("btn-minimize") as HTMLButtonElement;
 const closeBtn = document.getElementById("btn-close") as HTMLButtonElement;
@@ -265,12 +318,30 @@ function showToast(message: string): void {
 }
 
 /**
- * Backend errors for scraper problems are machine-readable markers:
+ * Backend errors and warnings for scrapers and local library use machine-readable markers:
  *   PROVIDER_LAYOUT_CHANGED|<provider>|<detail>
  *   RATE_LIMITED|<provider>|<retry_after_secs?>
+ *   LIBRARY|NOT_CONFIGURED|EMPTY|BUSY|NOT_INDEXED
+ *   LIBRARY_RANGE_RELAXED
  * They may be embedded in a longer message, so match anywhere and show a localized text.
  */
 function humanizeBackendMessage(raw: string): string {
+  if (raw.includes("LIBRARY_RANGE_RELAXED")) {
+    return t(currentLocale, "library.rangeRelaxed");
+  }
+  const libErr = /LIBRARY\|([A-Z_]+)/.exec(raw);
+  if (libErr) {
+    switch (libErr[1]) {
+      case "NOT_CONFIGURED":
+        return t(currentLocale, "library.err.notConfigured");
+      case "EMPTY":
+        return t(currentLocale, "library.err.empty");
+      case "BUSY":
+        return t(currentLocale, "library.err.busy");
+      case "NOT_INDEXED":
+        return t(currentLocale, "library.err.notIndexed");
+    }
+  }
   const layout = /PROVIDER_LAYOUT_CHANGED\|([^|]*)\|/.exec(raw);
   if (layout) {
     return t(currentLocale, "error.layoutChanged", { provider: layout[1] || "Source" });
@@ -403,7 +474,12 @@ function normalizeEnvelope(curve: number[]): number[] {
   return out;
 }
 
-function computeSimilarity(target: number[], candidate: number[]): number {
+function computeSimilarity(
+  target: number[],
+  candidate: number[],
+  cosineWeight = currentCosineWeight
+): number {
+  const w = Number.isFinite(cosineWeight) ? Math.max(0, Math.min(1, cosineWeight)) : 0.65;
   const a = normalizeEnvelope(target);
   const b = normalizeEnvelope(candidate);
   const energyA = a.reduce((acc, v) => acc + v * v, 0);
@@ -429,7 +505,7 @@ function computeSimilarity(target: number[], candidate: number[]): number {
     const denom = Math.sqrt(normA) * Math.sqrt(normB);
     const cos = denom > 1e-7 ? Math.max(0, Math.min(1, dot / denom)) : 0;
     const rmse = Math.max(0, Math.min(1, Math.sqrt(sqErr / ENVELOPE_POINTS)));
-    const combined = Math.max(0, Math.min(1, 0.65 * cos + 0.35 * (1 - rmse)));
+    const combined = Math.max(0, Math.min(1, w * cos + (1 - w) * (1 - rmse)));
     if (combined > best) best = combined;
   }
   return Math.round(best * 1000) / 10;
@@ -1067,7 +1143,7 @@ async function togglePlay(item: SfxItem, startSecs?: number): Promise<void> {
     startPlaybackLoop();
     updatePlaybackUi();
   } catch (err) {
-    showToast(String(err));
+    showToast(humanizeBackendMessage(String(err)));
   }
 }
 
@@ -1176,7 +1252,7 @@ function attachCardDragBehavior(card: HTMLElement, item: SfxItem): void {
           onEvent,
         });
       } catch (err) {
-        showToast(t(currentLocale, "toast.dragErr", { err: String(err) }));
+        showToast(t(currentLocale, "toast.dragErr", { err: humanizeBackendMessage(String(err)) }));
       }
     };
 
@@ -1280,7 +1356,7 @@ function createSfxCardElement(item: SfxItem, staggerIndex?: number): HTMLElement
   durSpan.className = "sfx-duration";
   durSpan.textContent = formatDuration(item.duration);
   const metaText = document.createElement("span");
-  metaText.textContent = `${item.provider} · ${item.author}`;
+  metaText.textContent = item.author ? `${item.provider} · ${item.author}` : item.provider;
   metaEl.append(durSpan, metaText);
 
   info.append(titleRow, metaEl, buildLicenseRow(item));
@@ -1323,7 +1399,7 @@ function createSfxCardElement(item: SfxItem, staggerIndex?: number): HTMLElement
       const path = await getOrPrepareWav(item);
       showToast(t(currentLocale, "toast.wavSaved", { path }));
     } catch (err) {
-      showToast(String(err));
+      showToast(humanizeBackendMessage(String(err)));
     }
   });
   actions.appendChild(wavBtn);
@@ -1444,16 +1520,22 @@ function renderLoadingSkeletons(): void {
   }
 }
 
+function providerLabelForSettings(settings: AppSettings): string {
+  if (settings.providerMode === "library") return "Local";
+  if (settings.providerMode === "mixkit" || !settings.freesoundApiKey.trim()) return "Mixkit";
+  return "Freesound";
+}
+
 async function refreshFooterMeta(): Promise<void> {
   try {
     const [settings, stats] = await Promise.all([
       invoke<AppSettings>("get_settings"),
       invoke<CacheStats>("get_cache_stats"),
     ]);
-    sidebarProvider.textContent =
-      settings.providerMode === "mixkit" || !settings.freesoundApiKey.trim()
-        ? "Mixkit"
-        : "Freesound";
+    if (Number.isFinite(settings.cosineWeight)) {
+      currentCosineWeight = Math.max(0, Math.min(1, settings.cosineWeight));
+    }
+    sidebarProvider.textContent = providerLabelForSettings(settings);
     lastCacheEntryCount = stats.entryCount;
     lastCacheStats = stats;
     sidebarCacheCount.textContent = t(currentLocale, "sidebar.cacheCount", {
@@ -1740,6 +1822,7 @@ function setLocale(locale: Locale): void {
     apiKeyInput.type === "password" ? "settings.show" : "settings.hide"
   );
   renderCacheStatsText();
+  renderLibraryUi();
 
   // Refresh dynamic labels inside already-rendered sound cards
   resultsList.querySelectorAll<HTMLElement>(".sfx-card").forEach((card) => {
@@ -1770,7 +1853,102 @@ function setLocale(locale: Locale): void {
   }
 }
 
-// Settings modal logic
+// Settings modal & local library logic
+function syncCosineWeightControl(weight01: number): void {
+  const clamped = Number.isFinite(weight01) ? Math.max(0, Math.min(1, weight01)) : 0.65;
+  const pct = Math.round(clamped * 100);
+  cosineWeightInput.value = String(pct);
+  valCosineWeight.textContent = `${pct}%`;
+  updateRangeFill(cosineWeightInput);
+}
+
+function renderLibraryUi(): void {
+  const dir = draftLibraryDir.trim();
+  if (dir) {
+    libraryDirText.textContent = dir;
+    libraryDirText.title = dir;
+    libraryDirText.classList.remove("is-empty");
+  } else {
+    libraryDirText.textContent = t(currentLocale, "library.noFolder");
+    libraryDirText.title = "";
+    libraryDirText.classList.add("is-empty");
+  }
+
+  pickLibraryBtn.disabled = isLibraryIndexing;
+  indexLibraryBtn.disabled = isLibraryIndexing || !dir;
+  cancelLibraryBtn.classList.toggle("hidden", !isLibraryIndexing);
+  libraryProgressWrap.classList.toggle("hidden", !isLibraryIndexing);
+
+  if (isLibraryIndexing) {
+    if (lastLibraryStatusState.kind === "progress" && lastLibraryStatusState.total > 0) {
+      const pct = Math.max(
+        0,
+        Math.min(100, (lastLibraryStatusState.done / lastLibraryStatusState.total) * 100)
+      );
+      libraryProgressFill.classList.remove("is-indeterminate");
+      libraryProgressFill.style.width = `${pct.toFixed(1)}%`;
+    } else {
+      libraryProgressFill.style.width = "";
+      libraryProgressFill.classList.add("is-indeterminate");
+    }
+  } else {
+    libraryProgressFill.classList.remove("is-indeterminate");
+    libraryProgressFill.style.width = "0%";
+  }
+
+  switch (lastLibraryStatusState.kind) {
+    case "scanning":
+      libraryStatusText.textContent = t(currentLocale, "library.scanning");
+      break;
+    case "progress":
+      libraryStatusText.textContent = t(currentLocale, "library.progress", {
+        done: lastLibraryStatusState.done,
+        total: lastLibraryStatusState.total,
+      });
+      break;
+    case "done": {
+      const s = lastLibraryStatusState.summary;
+      libraryStatusText.textContent = t(currentLocale, "library.doneSummary", {
+        indexed: s.indexed,
+        unchanged: s.unchanged,
+        removed: s.removed,
+        failed: s.failed,
+      });
+      break;
+    }
+    case "cancelled":
+      libraryStatusText.textContent = t(currentLocale, "library.cancelled");
+      break;
+    case "error":
+      libraryStatusText.textContent = lastLibraryStatusState.message;
+      break;
+    default:
+      libraryStatusText.textContent = t(currentLocale, "library.status", {
+        count: lastLibraryIndexedCount,
+      });
+      break;
+  }
+}
+
+async function refreshLibraryStatus(resetStatusWhenIdle = true): Promise<void> {
+  try {
+    const status = await invoke<LibraryStatus>("get_library_status");
+    lastLibraryIndexedCount = status.indexedCount;
+    isLibraryIndexing = status.indexing;
+    if (!draftLibraryDir && status.dir) {
+      draftLibraryDir = status.dir;
+    }
+    if (status.indexing && lastLibraryStatusState.kind === "idle") {
+      lastLibraryStatusState = { kind: "scanning" };
+    } else if (!status.indexing && resetStatusWhenIdle) {
+      lastLibraryStatusState = { kind: "idle" };
+    }
+    renderLibraryUi();
+  } catch {
+    renderLibraryUi();
+  }
+}
+
 async function refreshCacheStats(): Promise<void> {
   try {
     const stats = await invoke<CacheStats>("get_cache_stats");
@@ -1791,15 +1969,20 @@ async function openSettingsModal(): Promise<void> {
     apiKeyInput.value = settings.freesoundApiKey;
     providerModeSelect.value = settings.providerMode;
     commercialOnlyInput.checked = settings.commercialOnlyNoAttribution;
+    draftLibraryDir = settings.libraryDir ?? "";
+    currentCosineWeight = Number.isFinite(settings.cosineWeight)
+      ? Math.max(0, Math.min(1, settings.cosineWeight))
+      : 0.65;
+    syncCosineWeightControl(currentCosineWeight);
     savedLocale = normalizeLocale(settings.language);
     languageSelect.value = savedLocale;
     if (currentLocale !== savedLocale) {
       setLocale(savedLocale);
     }
   } catch (err) {
-    showToast(String(err));
+    showToast(humanizeBackendMessage(String(err)));
   }
-  await refreshCacheStats();
+  await Promise.all([refreshCacheStats(), refreshLibraryStatus(!isLibraryIndexing)]);
   appShell.classList.add("modal-open");
   settingsModal.classList.remove("hidden");
 }
@@ -1827,26 +2010,88 @@ toggleKeyBtn.addEventListener("click", () => {
   toggleKeyBtn.textContent = t(currentLocale, isPass ? "settings.hide" : "settings.show");
 });
 
+cosineWeightInput.addEventListener("input", () => {
+  const pct = parseInt(cosineWeightInput.value, 10);
+  const safePct = Number.isFinite(pct) ? Math.max(0, Math.min(100, pct)) : 65;
+  valCosineWeight.textContent = `${safePct}%`;
+  updateRangeFill(cosineWeightInput);
+});
+
+cosineWeightInput.addEventListener("dblclick", () => {
+  const def = cosineWeightInput.dataset.default ?? "65";
+  cosineWeightInput.value = def;
+  valCosineWeight.textContent = `${def}%`;
+  updateRangeFill(cosineWeightInput);
+  bumpElement(valCosineWeight);
+});
+
+pickLibraryBtn.addEventListener("click", async () => {
+  try {
+    const picked = await invoke<string | null>("pick_library_folder");
+    if (picked) {
+      draftLibraryDir = picked;
+      lastLibraryIndexedCount = 0;
+      lastLibraryStatusState = { kind: "idle" };
+      renderLibraryUi();
+    }
+  } catch (err) {
+    showToast(humanizeBackendMessage(String(err)));
+  }
+});
+
+indexLibraryBtn.addEventListener("click", async () => {
+  const dir = draftLibraryDir.trim();
+  if (!dir) {
+    showToast(t(currentLocale, "library.err.notConfigured"));
+    return;
+  }
+  isLibraryIndexing = true;
+  lastLibraryStatusState = { kind: "scanning" };
+  renderLibraryUi();
+  try {
+    await invoke("start_library_index", { dir });
+  } catch (err) {
+    isLibraryIndexing = false;
+    const msg = humanizeBackendMessage(String(err));
+    lastLibraryStatusState = { kind: "error", message: msg };
+    renderLibraryUi();
+    showToast(msg);
+  }
+});
+
+cancelLibraryBtn.addEventListener("click", () => {
+  void invoke("cancel_library_index").catch((err) => {
+    showToast(humanizeBackendMessage(String(err)));
+  });
+});
+
 saveSettingsBtn.addEventListener("click", async () => {
   const chosenLocale = normalizeLocale(languageSelect.value);
+  const cosinePct = parseInt(cosineWeightInput.value, 10);
+  const cosineWeight = Number.isFinite(cosinePct)
+    ? Math.max(0, Math.min(1, cosinePct / 100))
+    : 0.65;
   const settings: AppSettings = {
     freesoundApiKey: apiKeyInput.value.trim(),
     providerMode: providerModeSelect.value as ProviderMode,
     language: chosenLocale,
     commercialOnlyNoAttribution: commercialOnlyInput.checked,
+    libraryDir: draftLibraryDir.trim(),
+    cosineWeight,
   };
   try {
     await invoke("save_settings", { settings });
     savedLocale = chosenLocale;
+    currentCosineWeight = cosineWeight;
     setLocale(chosenLocale);
-    sidebarProvider.textContent =
-      settings.providerMode === "mixkit" || !settings.freesoundApiKey
-        ? "Mixkit"
-        : "Freesound";
+    sidebarProvider.textContent = providerLabelForSettings(settings);
+    if (userEnvelope && currentItems.length > 0) {
+      updateLiveMatchScores();
+    }
     closeSettingsModal(false);
     showToast(t(currentLocale, "toast.saved"));
   } catch (err) {
-    showToast(t(currentLocale, "toast.saveErr", { err: String(err) }));
+    showToast(t(currentLocale, "toast.saveErr", { err: humanizeBackendMessage(String(err)) }));
   }
 });
 
@@ -1967,15 +2212,59 @@ function initVisualPhysics(): void {
     .catch(() => {});
 }
 
+async function setupLibraryListeners(): Promise<void> {
+  try {
+    await listen<LibraryProgressPayload>("library-progress", ({ payload }) => {
+      if (payload.phase === "scanning") {
+        isLibraryIndexing = true;
+        lastLibraryStatusState = { kind: "scanning" };
+        renderLibraryUi();
+      } else if (payload.phase === "indexing") {
+        isLibraryIndexing = true;
+        lastLibraryStatusState = {
+          kind: "progress",
+          done: payload.processed,
+          total: payload.total,
+        };
+        renderLibraryUi();
+      }
+    });
+
+    await listen<LibraryIndexDonePayload>("library-index-done", ({ payload }) => {
+      isLibraryIndexing = false;
+      if (payload.error) {
+        const msg = humanizeBackendMessage(payload.error);
+        lastLibraryStatusState = { kind: "error", message: msg };
+        showToast(msg);
+      } else if (payload.summary?.cancelled) {
+        lastLibraryStatusState = { kind: "cancelled" };
+      } else if (payload.summary) {
+        lastLibraryStatusState = { kind: "done", summary: payload.summary };
+      }
+      renderLibraryUi();
+      void refreshLibraryStatus(false);
+    });
+  } catch {
+    // Non-fatal outside Tauri runtime
+  }
+}
+
 async function init(): Promise<void> {
   initVisualPhysics();
+  void setupLibraryListeners();
 
   try {
     const settings = await invoke<AppSettings>("get_settings");
     savedLocale = normalizeLocale(settings.language);
+    currentCosineWeight = Number.isFinite(settings.cosineWeight)
+      ? Math.max(0, Math.min(1, settings.cosineWeight))
+      : 0.65;
+    draftLibraryDir = settings.libraryDir ?? "";
+    syncCosineWeightControl(currentCosineWeight);
     languageSelect.value = savedLocale;
     setLocale(savedLocale);
   } catch {
+    syncCosineWeightControl(currentCosineWeight);
     setLocale("ru");
   }
 

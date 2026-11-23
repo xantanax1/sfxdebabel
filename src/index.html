@@ -582,6 +582,9 @@
               <option value="mixkit" data-i18n="settings.sourceMixkit">
                 Только Mixkit (без API-ключа)
               </option>
+              <option value="library" data-i18n="settings.sourceLibrary">
+                Только локальная библиотека (проиндексированная папка)
+              </option>
             </select>
           </div>
 
@@ -602,6 +605,74 @@
             </div>
             <p class="field-note" data-i18n="settings.apiNote">
               Ключ хранится локально в SQLite. Без ключа используется встроенный парсер Mixkit.
+            </p>
+          </div>
+
+          <div class="field">
+            <label data-i18n="library.title">Локальная библиотека</label>
+            <div class="library-box">
+              <div class="library-path-row">
+                <span id="library-dir-text" class="library-path is-empty"></span>
+                <button
+                  id="btn-pick-library"
+                  class="ghost-btn"
+                  type="button"
+                  data-i18n="library.choose"
+                >
+                  Выбрать папку…
+                </button>
+              </div>
+              <div class="library-actions-row">
+                <span id="library-status-text" class="cache-stats"></span>
+                <div class="library-btn-group">
+                  <button
+                    id="btn-index-library"
+                    class="ghost-btn"
+                    type="button"
+                    data-i18n="library.index"
+                  >
+                    Индексировать
+                  </button>
+                  <button
+                    id="btn-cancel-library"
+                    class="ghost-btn hidden"
+                    type="button"
+                    data-i18n="library.cancel"
+                  >
+                    Отмена
+                  </button>
+                </div>
+              </div>
+              <div id="library-progress-wrap" class="library-progress-wrap hidden">
+                <div class="library-progress-track">
+                  <div id="library-progress-fill" class="library-progress-fill"></div>
+                </div>
+              </div>
+            </div>
+            <p class="field-note" data-i18n="library.note">
+              Рекурсивно ищет mp3, ogg, wav и flac. При повторной индексации анализируются только новые и изменённые файлы. Чтобы искать по огибающей, выберите источник «Локальная библиотека».
+            </p>
+          </div>
+
+          <div class="field">
+            <div class="fx-control-row">
+              <label for="input-cosine-weight" data-i18n="settings.cosineWeight">
+                Сопоставление огибающей: форма и уровень
+              </label>
+              <span id="val-cosine-weight" class="fx-value">65%</span>
+            </div>
+            <input
+              id="input-cosine-weight"
+              class="fx-range"
+              type="range"
+              min="0"
+              max="100"
+              step="1"
+              value="65"
+              data-default="65"
+            />
+            <p class="field-note" data-i18n="settings.cosineWeightNote">
+              Вес косинуса (форма); остальное — RMSE (близость уровней). По умолчанию 65%.
             </p>
           </div>
 
