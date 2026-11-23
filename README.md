@@ -1,6 +1,8 @@
 <div align="center">
 
-# 🎛️ SFX de Babel
+<img src="./src-tauri/icons/128x128@2x.png" alt="SFX de Babel" width="88" height="88" />
+
+# SFX de Babel
 
 **Поиск звуковых эффектов по форме волны, Pure-Rust DSP FX Rack и мгновенный Drag-and-Drop 24-bit WAV**
 
