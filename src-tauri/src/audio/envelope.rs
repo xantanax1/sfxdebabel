@@ -90,7 +90,22 @@ pub fn normalize_envelope(curve: &[f32]) -> Vec<f32> {
 /// Computes perceptual envelope similarity percentage [0.0, 100.0] by combining
 /// directional shape alignment (cosine similarity) and magnitude closeness (1 - RMSE)
 /// across small +/-2-bin shifts to tolerate MP3 encoder padding / leading silence.
+#[allow(dead_code)] // default-weight shorthand, used by tests
 pub fn compute_similarity(target: &[f32], candidate: &[f32]) -> f32 {
+    compute_similarity_weighted(target, candidate, DEFAULT_COSINE_WEIGHT)
+}
+
+/// Default share of the cosine (shape) term; the rest goes to the RMSE (level) term.
+pub const DEFAULT_COSINE_WEIGHT: f32 = 0.65;
+
+/// Same metric as [`compute_similarity`] with a configurable blend:
+/// `score = w * cosine + (1 - w) * (1 - rmse)`, `w` clamped to `[0, 1]`.
+pub fn compute_similarity_weighted(target: &[f32], candidate: &[f32], cosine_weight: f32) -> f32 {
+    let w = if cosine_weight.is_finite() {
+        cosine_weight.clamp(0.0, 1.0)
+    } else {
+        DEFAULT_COSINE_WEIGHT
+    };
     let a = normalize_envelope(target);
     let b = normalize_envelope(candidate);
 
@@ -131,7 +146,7 @@ pub fn compute_similarity(target: &[f32], candidate: &[f32]) -> f32 {
             0.0
         };
         let rmse = (sq_err / ENVELOPE_POINTS as f32).sqrt().clamp(0.0, 1.0);
-        let combined = (0.65 * cosine + 0.35 * (1.0 - rmse)).clamp(0.0, 1.0);
+        let combined = (w * cosine + (1.0 - w) * (1.0 - rmse)).clamp(0.0, 1.0);
         if combined > best_score {
             best_score = combined;
         }
@@ -205,6 +220,28 @@ mod tests {
         }
         let score = compute_similarity(&a, &b);
         assert!(score > 95.0, "expected >95% under 2-bin shift, got {score}");
+    }
+
+    #[test]
+    fn weight_shifts_between_shape_and_level() {
+        // Same shape, different level floor: cosine stays high, RMSE penalizes.
+        let a: Vec<f32> = (0..ENVELOPE_POINTS)
+            .map(|i| if i < 32 { 1.0 } else { 0.0 })
+            .collect();
+        let b: Vec<f32> = (0..ENVELOPE_POINTS)
+            .map(|i| if i < 32 { 1.0 } else { 0.35 })
+            .collect();
+        let shape_only = compute_similarity_weighted(&a, &b, 1.0);
+        let level_only = compute_similarity_weighted(&a, &b, 0.0);
+        let default = compute_similarity(&a, &b);
+        assert!(shape_only > level_only, "{shape_only} vs {level_only}");
+        assert!(default >= level_only.min(shape_only) && default <= level_only.max(shape_only));
+        // Out-of-range / NaN weights are sanitized.
+        assert_eq!(
+            compute_similarity_weighted(&a, &b, 7.0),
+            compute_similarity_weighted(&a, &b, 1.0)
+        );
+        assert_eq!(compute_similarity_weighted(&a, &b, f32::NAN), default);
     }
 
     #[test]

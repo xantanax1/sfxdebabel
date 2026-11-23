@@ -2,6 +2,7 @@ mod audio;
 mod commands;
 mod db;
 mod error;
+mod library;
 mod license;
 mod models;
 mod providers;
@@ -15,6 +16,7 @@ use crate::commands::AppState;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_drag::init())
+        .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             let data_dir = app
                 .path()
@@ -38,6 +40,10 @@ pub fn run() {
             commands::save_settings,
             commands::get_cache_stats,
             commands::clear_cache,
+            commands::pick_library_folder,
+            commands::start_library_index,
+            commands::cancel_library_index,
+            commands::get_library_status,
         ])
         .run(tauri::generate_context!())
         .expect("error while running SFX de Babel");

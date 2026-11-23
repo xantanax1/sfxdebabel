@@ -1,5 +1,6 @@
 use std::collections::{HashMap, VecDeque};
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -9,17 +10,18 @@ use tokio::task::JoinSet;
 
 use crate::audio::decoder::{decode_audio_bytes, DecodedAudio};
 use crate::audio::envelope::{
-    compute_rms_envelope, compute_similarity, normalize_envelope, process_batch_parallel,
+    compute_rms_envelope, compute_similarity_weighted, normalize_envelope, process_batch_parallel,
 };
 use crate::audio::export::{export_temp_dir, export_to_wav, export_to_wav_24bit, ExportMeta};
 use crate::audio::fx::{AudioBuffer, FxChain, FxParams};
 use crate::audio::player::AudioPlayer;
 use crate::db::{CachedSfx, Database};
 use crate::error::AppError;
-use crate::license::LicenseInfo;
+use crate::library::{self, LIB_ID_PREFIX};
+use crate::license::{LicenseInfo, LICENSE_LOCAL};
 use crate::models::{
-    AppSettings, CacheStats, FxWaveformResult, PlaybackStatus, ProviderMode, SearchRequest,
-    SearchResponse, SfxItem,
+    AppSettings, CacheStats, FxWaveformResult, LibraryIndexDone, LibraryStatus, PlaybackStatus,
+    ProviderMode, SearchRequest, SearchResponse, SfxItem,
 };
 use crate::providers::freesound::FreesoundProvider;
 use crate::providers::freesound_web::FreesoundWebProvider;
@@ -63,11 +65,13 @@ struct SoundMeta {
 
 impl SoundMeta {
     fn export_meta(&self) -> ExportMeta {
+        // Local files carry no license information from us: write nothing about it.
+        let is_local = self.license.id == LICENSE_LOCAL;
         ExportMeta {
             title: self.title.clone(),
             author: self.author.clone(),
-            license_name: self.license.name.clone(),
-            license_url: self.license.url.clone(),
+            license_name: if is_local { String::new() } else { self.license.name.clone() },
+            license_url: if is_local { String::new() } else { self.license.url.clone() },
             source_url: self.source_url.clone(),
         }
     }
@@ -125,6 +129,8 @@ pub struct AppState {
     player: Arc<AudioPlayer>,
     audio_cache: Arc<RwLock<AudioRamCache>>,
     sound_meta: Arc<RwLock<HashMap<String, SoundMeta>>>,
+    index_cancel: Arc<AtomicBool>,
+    indexing: Arc<AtomicBool>,
 }
 
 impl AppState {
@@ -146,6 +152,8 @@ impl AppState {
             player,
             audio_cache,
             sound_meta,
+            index_cancel: Arc::new(AtomicBool::new(false)),
+            indexing: Arc::new(AtomicBool::new(false)),
         })
     }
 
@@ -161,21 +169,34 @@ impl AppState {
             }
         }
 
-        let resp = self.http.get(preview_url).send().await?;
-        if !resp.status().is_success() {
-            return Err(AppError::Provider(format!(
-                "Не удалось загрузить аудио ({})",
-                resp.status()
-            )));
-        }
-        let bytes = resp.bytes().await?;
-        let ext_hint = infer_audio_ext(preview_url);
+        let decoded = if sound_id.starts_with(LIB_ID_PREFIX) {
+            // Local library item: `preview_url` is the file path. Only paths present in the
+            // index may be read, so the IPC cannot be used to open arbitrary files.
+            let db = Arc::clone(&self.db);
+            let path = preview_url.to_string();
+            tokio::task::spawn_blocking(move || {
+                if db.library_get(&path)?.is_none() {
+                    return Err(AppError::Library("NOT_INDEXED".to_string()));
+                }
+                library::decode_file(&path)
+            })
+            .await
+            .map_err(|e| AppError::AudioDecode(format!("Внутренняя ошибка потока: {e}")))??
+        } else {
+            let resp = self.http.get(preview_url).send().await?;
+            if !resp.status().is_success() {
+                return Err(AppError::Provider(format!(
+                    "Не удалось загрузить аудио ({})",
+                    resp.status()
+                )));
+            }
+            let bytes = resp.bytes().await?;
+            let ext_hint = infer_audio_ext(preview_url);
 
-        let decoded = tokio::task::spawn_blocking(move || {
-            decode_audio_bytes(bytes, ext_hint.as_deref())
-        })
-        .await
-        .map_err(|e| AppError::AudioDecode(format!("Внутренняя ошибка потока: {e}")))??;
+            tokio::task::spawn_blocking(move || decode_audio_bytes(bytes, ext_hint.as_deref()))
+                .await
+                .map_err(|e| AppError::AudioDecode(format!("Внутренняя ошибка потока: {e}")))??
+        };
 
         let arc = Arc::new(decoded);
         let mut guard = self.audio_cache.write().await;
@@ -293,6 +314,23 @@ pub async fn search_sfx(
     let settings = state.db.get_settings().map_err(String::from)?;
     let normalized_query = normalize_sfx_query(&request.query);
 
+    let is_library_cursor = request
+        .cursor
+        .as_deref()
+        .is_some_and(|c| c.starts_with("lib:"));
+    if settings.provider_mode == ProviderMode::Library || is_library_cursor {
+        return search_library(
+            &state,
+            &settings,
+            &request,
+            &normalized_query,
+            min_duration,
+            max_duration,
+        )
+        .await
+        .map_err(String::from);
+    }
+
     let mut warning: Option<String> = None;
     let resolved_cursor: SearchCursor;
     let page_result: ProviderPage;
@@ -364,6 +402,7 @@ pub async fn search_sfx(
         };
 
         match settings.provider_mode {
+            ProviderMode::Library => unreachable!("library mode returns before provider dispatch"),
             ProviderMode::Freesound => {
                 if settings.freesound_api_key.trim().is_empty() {
                     return Err(AppError::MissingApiKey.into());
@@ -572,7 +611,7 @@ pub async fn search_sfx(
 
             let match_score = target_envelope
                 .as_ref()
-                .map(|target| compute_similarity(target, &envelope));
+                .map(|target| compute_similarity_weighted(target, &envelope, settings.cosine_weight));
 
             all_items.push(SfxItem {
                 id: cand.id,
@@ -622,6 +661,197 @@ pub async fn search_sfx(
         provider_used,
         warning,
         next_cursor,
+    })
+}
+
+const LIBRARY_PAGE_SIZE: usize = DEFAULT_PAGE_SIZE;
+
+/// Envelope + text search over the whole indexed local library (not just a text-query page).
+async fn search_library(
+    state: &AppState,
+    settings: &AppSettings,
+    request: &SearchRequest,
+    normalized_query: &str,
+    min_duration: f32,
+    max_duration: f32,
+) -> Result<SearchResponse, AppError> {
+    let dir = settings.library_dir.trim().to_string();
+    if dir.is_empty() {
+        return Err(AppError::Library("NOT_CONFIGURED".to_string()));
+    }
+
+    let page = request
+        .cursor
+        .as_deref()
+        .and_then(|c| c.strip_prefix("lib:"))
+        .and_then(|p| p.parse::<usize>().ok())
+        .filter(|&p| p >= 1)
+        .unwrap_or(1);
+
+    let target = request.envelope.as_ref().and_then(|raw| {
+        let norm = normalize_envelope(raw);
+        norm.iter().any(|&v| v > 1e-4).then_some(norm)
+    });
+    let tokens = library::query_tokens(normalized_query);
+    let weight = settings.cosine_weight;
+    let db = Arc::clone(&state.db);
+
+    let (hits, relaxed, total_rows) = tokio::task::spawn_blocking(move || {
+        let rows = db.library_rows(&library::root_prefix(&dir))?;
+        let total = rows.len();
+        let (rows, relaxed) = library::filter_by_duration(rows, min_duration, max_duration);
+        let hits = library::rank_library(rows, &tokens, target.as_deref(), weight);
+        Ok::<_, AppError>((hits, relaxed, total))
+    })
+    .await
+    .map_err(|e| AppError::AudioDecode(format!("Ошибка потока поиска: {e}")))??;
+
+    if total_rows == 0 {
+        return Err(AppError::Library("EMPTY".to_string()));
+    }
+
+    let start = (page - 1) * LIBRARY_PAGE_SIZE;
+    let has_more = hits.len() > start + LIBRARY_PAGE_SIZE;
+    let slice: Vec<_> = hits.into_iter().skip(start).take(LIBRARY_PAGE_SIZE).collect();
+
+    let local = LicenseInfo::local_file();
+    let mut items = Vec::with_capacity(slice.len());
+    {
+        let mut meta_guard = state.sound_meta.write().await;
+        for hit in slice {
+            let path = hit.row.path;
+            let id = library::library_item_id(&path);
+            let title = library::file_title(&path);
+            let folder = Path::new(&path)
+                .parent()
+                .and_then(|p| p.file_name())
+                .map(|n| n.to_string_lossy().into_owned())
+                .unwrap_or_default();
+
+            meta_guard.insert(
+                id.clone(),
+                SoundMeta {
+                    title: title.clone(),
+                    preview_url: path.clone(),
+                    author: String::new(),
+                    license: local.clone(),
+                    source_url: String::new(),
+                },
+            );
+            items.push(SfxItem {
+                id,
+                provider: "Local".to_string(),
+                title,
+                author: folder,
+                license: local.id.clone(),
+                license_name: local.name.clone(),
+                license_url: String::new(),
+                requires_attribution: false,
+                commercial_use_allowed: None,
+                duration: hit.row.duration,
+                preview_url: path,
+                source_url: String::new(),
+                tags: Vec::new(),
+                envelope: hit.row.envelope,
+                match_score: hit.score,
+            });
+        }
+    }
+
+    Ok(SearchResponse {
+        items,
+        provider_used: "Local".to_string(),
+        warning: (relaxed && page == 1).then(|| "LIBRARY_RANGE_RELAXED".to_string()),
+        next_cursor: has_more.then(|| format!("lib:{}", page + 1)),
+    })
+}
+
+#[tauri::command]
+pub async fn pick_library_folder(app: tauri::AppHandle) -> Result<Option<String>, String> {
+    use tauri_plugin_dialog::DialogExt;
+    tokio::task::spawn_blocking(move || {
+        app.dialog()
+            .file()
+            .blocking_pick_folder()
+            .and_then(|p| p.into_path().ok())
+            .map(|p| p.to_string_lossy().into_owned())
+    })
+    .await
+    .map_err(|e| format!("Ошибка диалога выбора папки: {e}"))
+}
+
+#[tauri::command]
+pub async fn start_library_index(
+    app: tauri::AppHandle,
+    state: tauri::State<'_, AppState>,
+    dir: String,
+) -> Result<(), String> {
+    use tauri::Emitter;
+
+    let dir = dir.trim().to_string();
+    if dir.is_empty() || !Path::new(&dir).is_dir() {
+        return Err(AppError::InvalidInput(format!("Папка не найдена: {dir}")).into());
+    }
+    if state.indexing.swap(true, Ordering::SeqCst) {
+        return Err(AppError::Library("BUSY".to_string()).into());
+    }
+    state.index_cancel.store(false, Ordering::SeqCst);
+
+    // Remember the folder so searches in Library mode use it.
+    let mut settings = state.db.get_settings().map_err(|e| {
+        state.indexing.store(false, Ordering::SeqCst);
+        String::from(e)
+    })?;
+    settings.library_dir = dir.clone();
+    if let Err(e) = state.db.save_settings(&settings) {
+        state.indexing.store(false, Ordering::SeqCst);
+        return Err(e.into());
+    }
+
+    let db = Arc::clone(&state.db);
+    let cancel = Arc::clone(&state.index_cancel);
+    let flag = Arc::clone(&state.indexing);
+    tokio::task::spawn_blocking(move || {
+        let result = library::index_library(&db, &dir, &cancel, |p| {
+            let _ = app.emit("library-progress", &p);
+        });
+        flag.store(false, Ordering::SeqCst);
+        let done = match result {
+            Ok(summary) => LibraryIndexDone {
+                summary: Some(summary),
+                error: None,
+            },
+            Err(e) => LibraryIndexDone {
+                summary: None,
+                error: Some(e.to_string()),
+            },
+        };
+        let _ = app.emit("library-index-done", &done);
+    });
+    Ok(())
+}
+
+#[tauri::command]
+pub fn cancel_library_index(state: tauri::State<'_, AppState>) {
+    state.index_cancel.store(true, Ordering::SeqCst);
+}
+
+#[tauri::command]
+pub fn get_library_status(state: tauri::State<'_, AppState>) -> Result<LibraryStatus, String> {
+    let settings = state.db.get_settings().map_err(String::from)?;
+    let dir = settings.library_dir.trim().to_string();
+    let indexed_count = if dir.is_empty() {
+        0
+    } else {
+        state
+            .db
+            .library_count(&library::root_prefix(&dir))
+            .map_err(String::from)?
+    };
+    Ok(LibraryStatus {
+        dir,
+        indexed_count,
+        indexing: state.indexing.load(Ordering::SeqCst),
     })
 }
 

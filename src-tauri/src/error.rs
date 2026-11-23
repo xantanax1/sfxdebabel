@@ -32,6 +32,11 @@ pub enum AppError {
     #[error("Не задан API-ключ Freesound")]
     MissingApiKey,
 
+    /// Local-library problems. Machine-readable (`LIBRARY|<code>`) so the UI can localize them:
+    /// `NOT_CONFIGURED`, `EMPTY`, `BUSY`, `NOT_INDEXED`.
+    #[error("LIBRARY|{0}")]
+    Library(String),
+
     /// The page loaded but the markup no longer matches what the parser expects.
     /// The `PROVIDER_LAYOUT_CHANGED|provider|detail` prefix is parsed by the UI to show a localized message.
     #[error("PROVIDER_LAYOUT_CHANGED|{provider}|{detail}")]

@@ -13,6 +13,8 @@ const KEY_FREESOUND_API: &str = "freesound_api_key";
 const KEY_PROVIDER_MODE: &str = "provider_mode";
 const KEY_LANGUAGE: &str = "language";
 const KEY_COMMERCIAL_ONLY: &str = "commercial_only_no_attribution";
+const KEY_LIBRARY_DIR: &str = "library_dir";
+const KEY_COSINE_WEIGHT: &str = "cosine_weight";
 
 #[derive(Debug, Clone)]
 pub struct CachedSfx {
@@ -53,6 +55,16 @@ fn migrate_license_columns(conn: &Connection) -> Result<(), AppError> {
     Ok(())
 }
 
+/// One indexed local audio file.
+#[derive(Debug, Clone)]
+pub struct LibraryRow {
+    pub path: String,
+    pub mtime_ms: i64,
+    pub size: i64,
+    pub duration: f32,
+    pub envelope: Vec<f32>,
+}
+
 pub struct Database {
     conn: Mutex<Connection>,
     db_path: PathBuf,
@@ -86,6 +98,14 @@ impl Database {
                 cached_at INTEGER NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_sfx_cache_cached_at ON sfx_cache(cached_at);
+            CREATE TABLE IF NOT EXISTS library_files (
+                path TEXT PRIMARY KEY,
+                mtime_ms INTEGER NOT NULL,
+                size INTEGER NOT NULL,
+                duration REAL NOT NULL,
+                envelope_json TEXT NOT NULL,
+                indexed_at INTEGER NOT NULL
+            );
             ",
         )?;
         migrate_license_columns(&conn)?;
@@ -118,10 +138,19 @@ impl Database {
                     settings.provider_mode = match v.as_str() {
                         "freesound" => ProviderMode::Freesound,
                         "mixkit" => ProviderMode::Mixkit,
+                        "library" => ProviderMode::Library,
                         _ => ProviderMode::Auto,
                     };
                 }
                 KEY_COMMERCIAL_ONLY => settings.commercial_only_no_attribution = v == "1",
+                KEY_LIBRARY_DIR => settings.library_dir = v,
+                KEY_COSINE_WEIGHT => {
+                    if let Ok(w) = v.parse::<f32>() {
+                        if w.is_finite() {
+                            settings.cosine_weight = w.clamp(0.0, 1.0);
+                        }
+                    }
+                }
                 KEY_LANGUAGE => {
                     settings.language = match v.as_str() {
                         "en" => Language::En,
@@ -148,6 +177,7 @@ impl Database {
             ProviderMode::Auto => "auto",
             ProviderMode::Freesound => "freesound",
             ProviderMode::Mixkit => "mixkit",
+            ProviderMode::Library => "library",
         };
         let lang_str = match settings.language {
             Language::En => "en",
@@ -178,6 +208,16 @@ impl Database {
                 KEY_COMMERCIAL_ONLY,
                 if settings.commercial_only_no_attribution { "1" } else { "0" }
             ],
+        )?;
+        tx.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![KEY_LIBRARY_DIR, settings.library_dir.trim()],
+        )?;
+        tx.execute(
+            "INSERT INTO settings (key, value) VALUES (?1, ?2)
+             ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            params![KEY_COSINE_WEIGHT, settings.cosine_weight.clamp(0.0, 1.0).to_string()],
         )?;
         tx.commit()?;
         Ok(())
@@ -343,6 +383,150 @@ impl Database {
         }
         tx.commit()?;
         Ok(())
+    }
+
+    // ---- Local library index -------------------------------------------------
+
+    /// Stored `(mtime_ms, size)` for every indexed file whose path starts with `root_prefix`.
+    pub fn library_existing(
+        &self,
+        root_prefix: &str,
+    ) -> Result<HashMap<String, (i64, i64)>, AppError> {
+        let conn = self.lock()?;
+        let mut stmt = conn.prepare(
+            "SELECT path, mtime_ms, size FROM library_files WHERE substr(path, 1, ?1) = ?2",
+        )?;
+        let rows = stmt.query_map(
+            params![root_prefix.chars().count() as i64, root_prefix],
+            |r| Ok((r.get::<_, String>(0)?, r.get::<_, i64>(1)?, r.get::<_, i64>(2)?)),
+        )?;
+        let mut out = HashMap::new();
+        for row in rows {
+            let (p, m, s) = row?;
+            out.insert(p, (m, s));
+        }
+        Ok(out)
+    }
+
+    pub fn library_upsert(&self, rows: &[LibraryRow]) -> Result<(), AppError> {
+        if rows.is_empty() {
+            return Ok(());
+        }
+        let mut conn = self.lock()?;
+        let now = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs() as i64;
+        let tx = conn.transaction()?;
+        {
+            let mut stmt = tx.prepare(
+                "INSERT INTO library_files (path, mtime_ms, size, duration, envelope_json, indexed_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                 ON CONFLICT(path) DO UPDATE SET
+                    mtime_ms = excluded.mtime_ms, size = excluded.size,
+                    duration = excluded.duration, envelope_json = excluded.envelope_json,
+                    indexed_at = excluded.indexed_at",
+            )?;
+            for r in rows {
+                stmt.execute(params![
+                    r.path,
+                    r.mtime_ms,
+                    r.size,
+                    r.duration as f64,
+                    serde_json::to_string(&r.envelope)?,
+                    now
+                ])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn library_delete(&self, paths: &[String]) -> Result<(), AppError> {
+        if paths.is_empty() {
+            return Ok(());
+        }
+        let mut conn = self.lock()?;
+        let tx = conn.transaction()?;
+        {
+            let mut stmt = tx.prepare("DELETE FROM library_files WHERE path = ?1")?;
+            for p in paths {
+                stmt.execute(params![p])?;
+            }
+        }
+        tx.commit()?;
+        Ok(())
+    }
+
+    pub fn library_rows(&self, root_prefix: &str) -> Result<Vec<LibraryRow>, AppError> {
+        let conn = self.lock()?;
+        let mut stmt = conn.prepare(
+            "SELECT path, mtime_ms, size, duration, envelope_json FROM library_files
+             WHERE substr(path, 1, ?1) = ?2",
+        )?;
+        let rows = stmt.query_map(
+            params![root_prefix.chars().count() as i64, root_prefix],
+            |r| {
+                Ok((
+                    r.get::<_, String>(0)?,
+                    r.get::<_, i64>(1)?,
+                    r.get::<_, i64>(2)?,
+                    r.get::<_, f64>(3)?,
+                    r.get::<_, String>(4)?,
+                ))
+            },
+        )?;
+        let mut out = Vec::new();
+        for row in rows {
+            let (path, mtime_ms, size, duration, env_json) = row?;
+            let envelope: Vec<f32> = serde_json::from_str(&env_json).unwrap_or_default();
+            if envelope.is_empty() {
+                continue;
+            }
+            out.push(LibraryRow {
+                path,
+                mtime_ms,
+                size,
+                duration: duration as f32,
+                envelope,
+            });
+        }
+        Ok(out)
+    }
+
+    pub fn library_get(&self, path: &str) -> Result<Option<LibraryRow>, AppError> {
+        let conn = self.lock()?;
+        let mut stmt = conn.prepare(
+            "SELECT path, mtime_ms, size, duration, envelope_json FROM library_files WHERE path = ?1",
+        )?;
+        let mut rows = stmt.query(params![path])?;
+        if let Some(r) = rows.next()? {
+            let env_json: String = r.get(4)?;
+            return Ok(Some(LibraryRow {
+                path: r.get(0)?,
+                mtime_ms: r.get(1)?,
+                size: r.get(2)?,
+                duration: r.get::<_, f64>(3)? as f32,
+                envelope: serde_json::from_str(&env_json).unwrap_or_default(),
+            }));
+        }
+        Ok(None)
+    }
+
+    pub fn library_count(&self, root_prefix: &str) -> Result<usize, AppError> {
+        let conn = self.lock()?;
+        let n: i64 = conn.query_row(
+            "SELECT COUNT(*) FROM library_files WHERE substr(path, 1, ?1) = ?2",
+            params![root_prefix.chars().count() as i64, root_prefix],
+            |r| r.get(0),
+        )?;
+        Ok(n.max(0) as usize)
+    }
+
+    fn lock(&self) -> Result<std::sync::MutexGuard<'_, Connection>, AppError> {
+        self.conn
+            .lock()
+            .map_err(|_| AppError::InvalidInput("Ошибка блокировки БД".to_string()))
     }
 
     pub fn clear_cache(&self, temp_wav_dir: &Path) -> Result<usize, AppError> {

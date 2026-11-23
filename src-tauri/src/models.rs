@@ -7,6 +7,8 @@ pub enum ProviderMode {
     Auto,
     Freesound,
     Mixkit,
+    /// Search the user's indexed local folder instead of online sources.
+    Library,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Default)]
@@ -34,6 +36,16 @@ pub struct AppSettings {
     /// Keep only sounds positively known to be usable commercially without attribution.
     #[serde(default)]
     pub commercial_only_no_attribution: bool,
+    /// Root folder of the local library (empty = not configured).
+    #[serde(default)]
+    pub library_dir: String,
+    /// Weight of the cosine (shape) term in envelope matching; RMSE (level) gets `1 - w`.
+    #[serde(default = "default_cosine_weight")]
+    pub cosine_weight: f32,
+}
+
+fn default_cosine_weight() -> f32 {
+    crate::audio::envelope::DEFAULT_COSINE_WEIGHT
 }
 
 impl Default for AppSettings {
@@ -43,6 +55,8 @@ impl Default for AppSettings {
             provider_mode: ProviderMode::Auto,
             language: Language::Ru,
             commercial_only_no_attribution: false,
+            library_dir: String::new(),
+            cosine_weight: default_cosine_weight(),
         }
     }
 }
@@ -94,6 +108,21 @@ pub struct SearchResponse {
     pub provider_used: String,
     pub warning: Option<String>,
     pub next_cursor: Option<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryStatus {
+    pub dir: String,
+    pub indexed_count: usize,
+    pub indexing: bool,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LibraryIndexDone {
+    pub summary: Option<crate::library::IndexSummary>,
+    pub error: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
