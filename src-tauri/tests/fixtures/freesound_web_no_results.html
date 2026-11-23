@@ -1,0 +1,472 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=0">
+    <meta name="theme-color" content="#000000">
+    <title>Freesound - Search</title>
+    <meta name="description" content="Freesound: collaborative database of creative-commons licensed sound for musicians and sound lovers. Have you freed your sound today?">
+    <meta name="keywords" content="free, sound">
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+    <link rel="mask-icon" href="/safari-pinned-tab.svg" color="#fd5b65">
+    <meta name="theme-color" content="#fd5b65">
+    <meta name="msapplication-config" content="none" />
+    <link id="style" rel="stylesheet" href="/static/bw-frontend/dist/index.9311b4316e27.css">
+</head>
+<body>
+<div class="modal " id="loginModal" tabindex="-1" role="dialog" aria-label="Login modal" aria-hidden="true">
+    <div class="modal-wrapper">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <span class="close" data-dismiss="modal" aria-label="Close">
+                        <span class="bw-icon-close ">
+</span>
+                    </span>
+                </div>
+                <div class="modal-body">
+<div class="col-12">
+    <div class="text-center">
+        <h4 class="v-spacing-5">Log in to Freesound</h4>
+        <form id="loginForm" class="bw-form bw-form-less-spacing" method="post" action="/home/login/"><input type="hidden" name="csrfmiddlewaretoken" value="cYx5NJZ6dfSfhFk1TtrRYQpSl12bmwVtwlBF61rbPkUEIONrJUg2ZjJarU7DbifZ">
+            <p>
+    <label for="id_username">Username:</label>
+    <input type="text" name="username" autofocus autocapitalize="none" autocomplete="username" maxlength="150" placeholder="Enter your email or username" required id="id_username">
+  </p>
+  <p>
+    <label for="id_password">Password:</label>
+    <input type="password" name="password" autocomplete="current-password" placeholder="Enter your password" required id="id_password">
+  </p>
+            <input type="hidden" name="next" value="/search/?q=zzqqxxnonexistent" />
+            <button type="submit" class="btn-primary v-spacing-top-2">Log in</button>
+        </form>
+    </div>
+</div>
+                </div>
+                <div class="modal-footer">
+    <a class="v-spacing-top-3" data-toggle="problems-logging-in-modal">Problems logging in?</a>
+                </div>
+                <div class="modal-extra-info">
+    <a data-toggle="registration-modal">Don't have an account? Join now</a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal " id="problemsLoggingInModal" tabindex="-1" role="dialog" aria-label="Problems logging in modal" aria-hidden="true">
+    <div class="modal-wrapper">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <span class="close" data-dismiss="modal" aria-label="Close">
+                        <span class="bw-icon-close ">
+</span>
+                    </span>
+                </div>
+                <div class="modal-body">
+<div class="col-12">
+    <div class="text-center">
+        <h4 class="v-spacing-5">Problems logging in?</h4>
+        <div class="text-grey v-spacing-top-negative-1 v-spacing-4">
+            Enter your email or username below and we'll send you a link to help you login into your account.
+        </div>
+        <form id="problemsLoggingInModalForm" class="bw-form bw-form-less-spacing" method="post" action="/home/problems/"><input type="hidden" name="csrfmiddlewaretoken" value="cYx5NJZ6dfSfhFk1TtrRYQpSl12bmwVtwlBF61rbPkUEIONrJUg2ZjJarU7DbifZ">
+            <p>
+    <input type="text" name="username_or_email" maxlength="254" placeholder="Your email or username" required id="id_username_or_email">
+  </p>
+            <button id="recovery-account" type="submit" class="btn-primary v-spacing-top-2">Send me a link</button>
+        </form>
+    </div>
+</div>
+                </div>
+                <div class="modal-footer">
+    <a class="v-spacing-top-3" data-link="loginModal"><span class="bw-icon-chevron bw-icon__chevron_left">
+</span> Back to log in</a>
+                </div>
+                <div class="modal-extra-info">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal " id="feedbackRegistration" tabindex="-1" role="dialog" aria-label="Registration complete modal" aria-hidden="true">
+    <div class="modal-wrapper">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <span class="close" data-dismiss="modal" aria-label="Close">
+                        <span class="bw-icon-close ">
+</span>
+                    </span>
+                </div>
+                <div class="modal-body">
+<div class="col-12">
+    <div class="text-center">
+        <h4 class="v-spacing-5">Almost there!</h4>
+        <p class="main-text">We've sent a verification link by email</p>
+        <p class="secondary-text">Didn't receive the email? Check your Spam folder, it may have been caught by a filter. If you still don't see it, you can <a href="/home/reactivate/">resend the verification email</a>.</p>
+    </div>
+</div>
+                </div>
+                <div class="modal-footer">
+                </div>
+                <div class="modal-extra-info">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<div class="modal zindex2000" id="confirmationModal" tabindex="-1" role="dialog" aria-label="Confirmation modal" aria-hidden="true">
+    <div class="modal-wrapper">
+        <div class="modal-dialog modal-dialog-centered">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <span class="close" data-dismiss="modal" aria-label="Close">
+                        <span class="bw-icon-close ">
+</span>
+                    </span>
+                </div>
+                <div class="modal-body">
+    <div class="text-center">
+        <h4 id="confirmationModalTitle">Default title</h4>
+        <div id="confirmationModalHelpText" class="v-spacing-top-2"></div>
+        <div class="row v-spacing-top-4 v-spacing-3">
+            <div class="col-4 offset-2">
+                <form id="confirmationModalAcceptSubmitForm" method="post" action=""><input type="hidden" name="csrfmiddlewaretoken" value="cYx5NJZ6dfSfhFk1TtrRYQpSl12bmwVtwlBF61rbPkUEIONrJUg2ZjJarU7DbifZ">
+                    <button type="submit" class="btn-primary">Yes</button>
+                </form>
+            </div>
+            <div class="col-4">
+                <button class="btn-secondary" data-dismiss="modal">Cancel</button>
+            </div>
+        </div>
+    </div>
+                </div>
+                <div class="modal-footer">
+                </div>
+                <div class="modal-extra-info">
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+    <div id="genericModalWrapper"></div>
+    <div class="toast" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="toast-body"></div>
+</div>
+    <div class="notifications-wrapper"></div>
+    <div class="bw-page" aria-hidden="false">
+<nav class="bw-nav bw-nav--expanded">
+    <div class="container bw-nav__container">
+        <form id="search-page-navbar-form" method="get" action="/search/">
+        <div class="bw-nav__logo-search-container">
+            <div class="bw-nav__logo">
+                <a href="/" class="no-hover"></a>
+            </div>
+            <div class="input-wrapper">
+                <input id="search-input-browse-navbar" name="q" type="search" value="zzqqxxnonexistent" placeholder="Search sounds..." autocomplete="off" />
+            </div>
+        </div>
+        </form>
+        <ul class="bw-nav__actions">
+            <li class="bw-nav__action d-none d-lg-flex">
+    <a class="bw-link--grey font-weight-bold" href="/browse/" role="menuitem">Sounds</a>
+</li>
+<li class="bw-nav__action d-none d-lg-flex">
+    <a class="bw-link--grey font-weight-bold" href="/browse/tags/" role="menuitem">Tags</a>
+</li>
+<li class="bw-nav__action d-none d-lg-flex">
+    <a class="bw-link--grey font-weight-bold" href="/forum/" role="menuitem">Forum</a>
+</li>
+<li class="bw-nav__action d-none d-lg-flex">
+    <a class="bw-link--grey font-weight-bold" href="/browse/geotags/" role="menuitem">Map</a>
+</li>
+<li class="bw-nav__action dropdown">
+    <a class="bw-link--grey bw-nav__menu dropdown-toggle no-hover bw-icon-ellipsis" id="three-dots-menu" aria-label="Menu"
+       data-toggle="dropdown" tabindex="0"></a>
+    <ul class="dropdown-menu" aria-labelledby="three-dots-menu">
+        <li class="bw-nav__action dropdown-item d-lg-none">
+            <a class="bw-link--black" href="/browse/">Sounds</a>
+        </li>
+        <li class="bw-nav__action dropdown-item">
+            <a class="bw-link--black" href="/browse/packs/">Packs</a>
+        </li>
+        <li class="bw-nav__action dropdown-item">
+            <a class="bw-link--black" href="/collections/">Collections</a>
+        </li>
+        <li class="bw-nav__action dropdown-item d-lg-none">
+            <a class="bw-link--black" href="/forum/">Forum</a>
+        </li>
+        <li class="bw-nav__action dropdown-item d-lg-none">
+            <a class="bw-link--black" href="/browse/geotags/">Map</a>
+        </li>
+        <li class="bw-nav__action dropdown-item d-lg-none">
+            <a class="bw-link--black" href="/browse/tags/">Tags</a>
+        </li>
+        <li class="bw-nav__action dropdown-item">
+            <a class="bw-link--black" href="/browse/random/">Random sound</a>
+        </li>
+        <li class="bw-nav__action dropdown-item">
+            <a class="bw-link--black" href="/charts/">Charts</a>
+        </li>
+        <li class="bw-nav__action dropdown-item d-lg-none">
+            <a class="bw-link--black" href="/donations/donate/">Donate</a>
+        </li>
+        <li class="bw-nav__action dropdown-item">
+            <a class="bw-link--grey" href="/help/faq/">Help</a>
+        </li>
+    </ul>
+</li>
+    <li class="bw-nav__action">
+        <button class="btn-secondary" data-toggle="login-modal" data-target="#loginModal" role="menuitem">Log in</button>
+    </li>
+    <li class="bw-nav__action d-none d-lg-flex">
+        <button class="btn-primary" data-toggle="registration-modal" data-target="#registerModal" role="menuitem">Join</button>
+    </li>
+        </ul>
+    </div>
+</nav>
+    <div class="container">
+            <div class="navbar-space-filler v-spacing-3 v-spacing-top-2">
+                <form method="get" id="search_form" action="/search/">
+                    <div class="v-spacing-5 ">
+                        <div class="middle center">
+                            <div class="bw-search__input_wrapper"><i class="bw-icon-search input-icon text-light-grey"></i>
+                                <input id="search-input-browse"
+                                       class="bw-search__input"
+                                       name="q"
+                                       type="text"
+                                       value="zzqqxxnonexistent"
+                                       placeholder="Search sounds..."
+                                       autocomplete="off"
+                                       />
+                            </div>
+                            <span class="bw-search_remove-query" id="remove-content-search"><span class="bw-icon-close ">
+</span></span>
+                        </div>
+                        <input type="hidden" name="f" value=""/>
+                    </div>
+                    <div>
+                        <div class="divider-light"></div>
+                        <div class="padding-3 v-padding-2 between font-weight-bold middle">
+                            <div class="col-4">
+                                        0 sounds
+                            </div>
+                            <div class="col-4 middle center">
+                                <a href="#" class="bw-link--grey-light" id="toggle_advanced_search_options"></a>
+                            </div>
+                            <div class="col-4 right browse__search-overview-sorter">
+                                <div class="">
+<label class="text-light-grey d-none d-md-inline">Sort:</label>
+<select id="id_sort_by" name="s" >
+    <option value="Automatic by relevance"selected="selected">Automatic by relevance</option>
+    <option value="Duration (longest first)">Duration (longest first)</option>
+    <option value="Duration (shortest first)">Duration (shortest first)</option>
+    <option value="Date added (newest first)">Date added (newest first)</option>
+    <option value="Date added (oldest first)">Date added (oldest first)</option>
+    <option value="Downloads (most first)">Downloads (most first)</option>
+    <option value="Downloads (least first)">Downloads (least first)</option>
+    <option value="Rating (highest first)">Rating (highest first)</option>
+    <option value="Rating (lowest first)">Rating (lowest first)</option>
+</select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="divider-light"></div>
+                        <div id="advanced-search-options" data-visible="0" class="display-none">
+                            <div class="padding-2">
+                                <div class="row">
+                                    <div class="col-md-4 bw-search__advanced-search-filter-section v-spacing-2">
+                                        <div class="bw-search__filter-section-name caps text-light-grey text-18">
+                                            Search in
+                                        </div>
+                                        <div class="row no-gutters v-spacing-top-1 ">
+                                                <div class="col-6 v-padding-1">
+                                                    <label class="between w-100 cursor-pointer">
+                                                        <div class="bw-search__filter-checkbox">
+                                                            <input name="si_tags" type="checkbox" class="bw-checkbox"  />
+                                                        </div>
+                                                        <div class="bw-search__filter-name">Tags</div>
+                                                    </label>
+                                                </div>
+                                                <div class="col-6 v-padding-1">
+                                                    <label class="between w-100 cursor-pointer">
+                                                        <div class="bw-search__filter-checkbox">
+                                                            <input name="si_name" type="checkbox" class="bw-checkbox"  />
+                                                        </div>
+                                                        <div class="bw-search__filter-name">Sound name</div>
+                                                    </label>
+                                                </div>
+                                                <div class="col-6 v-padding-1">
+                                                    <label class="between w-100 cursor-pointer">
+                                                        <div class="bw-search__filter-checkbox">
+                                                            <input name="si_description" type="checkbox" class="bw-checkbox"  />
+                                                        </div>
+                                                        <div class="bw-search__filter-name">Description</div>
+                                                    </label>
+                                                </div>
+                                                <div class="col-6 v-padding-1">
+                                                    <label class="between w-100 cursor-pointer">
+                                                        <div class="bw-search__filter-checkbox">
+                                                            <input name="si_packname" type="checkbox" class="bw-checkbox"  />
+                                                        </div>
+                                                        <div class="bw-search__filter-name">Pack name</div>
+                                                    </label>
+                                                </div>
+                                                <div class="col-6 v-padding-1">
+                                                    <label class="between w-100 cursor-pointer">
+                                                        <div class="bw-search__filter-checkbox">
+                                                            <input name="si_collection_names" type="checkbox" class="bw-checkbox"  />
+                                                        </div>
+                                                        <div class="bw-search__filter-name">Collections</div>
+                                                    </label>
+                                                </div>
+                                                <div class="col-6 v-padding-1">
+                                                    <label class="between w-100 cursor-pointer">
+                                                        <div class="bw-search__filter-checkbox">
+                                                            <input name="si_sound_id" type="checkbox" class="bw-checkbox"  />
+                                                        </div>
+                                                        <div class="bw-search__filter-name">Sound ID</div>
+                                                    </label>
+                                                </div>
+                                                <div class="col-6 v-padding-1">
+                                                    <label class="between w-100 cursor-pointer">
+                                                        <div class="bw-search__filter-checkbox">
+                                                            <input name="si_username" type="checkbox" class="bw-checkbox"  />
+                                                        </div>
+                                                        <div class="bw-search__filter-name">Username</div>
+                                                    </label>
+                                                </div>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-3 bw-search__advanced-search-filter-section v-spacing-2">
+                                        <div class="bw-search__filter-section-name caps text-light-grey text-18">
+                                            Duration
+                                        </div>
+                                        <div class="bw-search__filter-range v-spacing-top-2">
+                                            <input name="d0" class="bw-search_input-range v-spacing-1" type="text" value="0"/> - <input name="d1" class="bw-search_input-range" type="text" value="*"/> <span>seconds</span>
+                                        </div>
+                                    </div>
+                                    <div class="col-md-5 bw-search__advanced-search-filter-section v-spacing-2">
+                                        <div class="bw-search__filter-section-name caps text-light-grey text-18">
+                                            Other
+                                        </div>
+                                        <div class="row no-gutters v-spacing-top-1">
+                                            <div class="col-6 v-padding-1">
+<label for="id_is_geotagged" class="between w-100 cursor-pointer ">
+    <div class="bw-search__filter-checkbox">
+        <input id="id_is_geotagged" name="ig" type="checkbox" class="bw-checkbox"  />
+    </div>
+    <div class="bw-search__filter-name" title="Only find sounds that have geolocation information">Only geotagged sounds</div>
+</label>
+                                            </div>
+                                            <div class="col-6 v-padding-1">
+<label for="id_is_remix" class="between w-100 cursor-pointer ">
+    <div class="bw-search__filter-checkbox">
+        <input id="id_is_remix" name="r" type="checkbox" class="bw-checkbox"  />
+    </div>
+    <div class="bw-search__filter-name" title="Only find sounds that are a remix of other sounds or have been remixed">Only remix sounds</div>
+</label>
+                                            </div>
+                                            <div class="col-6 v-padding-1">
+<label for="id_group_by_pack" class="between w-100 cursor-pointer ">
+    <div class="bw-search__filter-checkbox">
+        <input id="id_group_by_pack" name="g" type="checkbox" class="bw-checkbox" checked />
+    </div>
+    <div class="bw-search__filter-name" title="Group search results so that multiple sounds of the same pack only represent one item">Group sounds by pack</div>
+</label>
+                                            </div>
+                                            <div class="col-6 v-padding-1">
+<label for="id_display_as_packs" class="between w-100 cursor-pointer ">
+    <div class="bw-search__filter-checkbox">
+        <input id="id_display_as_packs" name="dp" type="checkbox" class="bw-checkbox"  />
+    </div>
+    <div class="bw-search__filter-name" title="Display search results as packs rather than individual sounds">Display results as packs</div>
+</label>
+                                            </div>
+                                            <div class="col-6 v-padding-1">
+<label for="id_grid_mode" class="between w-100 cursor-pointer ">
+    <div class="bw-search__filter-checkbox">
+        <input id="id_grid_mode" name="cm" type="checkbox" class="bw-checkbox"  />
+    </div>
+    <div class="bw-search__filter-name" title="Display search results in a grid so that more sounds are visible per search results page">Display results in grid</div>
+</label>
+                                            </div>
+                                            <div class="col-6 v-padding-1">
+<label for="id_map_mode" class="between w-100 cursor-pointer ">
+    <div class="bw-search__filter-checkbox">
+        <input id="id_map_mode" name="mm" type="checkbox" class="bw-checkbox"  />
+    </div>
+    <div class="bw-search__filter-name" title="Display search results in a map">Display results in map</div>
+</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="v-spacing-4 center">
+                                <button id="advanced-search-apply-button" class="btn-primary" disabled>Apply advanced search filters</button>
+                            </div>
+                            <div class="divider-light"></div>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            <div class="row">
+                <div class="col-12 center v-spacing-top-negative-2 d-md-none">
+                    <div data-target="collapsable-filters" data-show-text="Show filters" data-hide-text="Hide filters" data-hide-on-load class="collapsable-toggle v-spacing-top-2 font-weight-bold text-light-grey"></div>
+                </div>
+                <main class="col-12 ">
+                        <div class="v-spacing-6 v-spacing-top-2">
+                                <div class="v-spacing-7 v-spacing-top-6 w-100 text-center">
+        <h5>No results...</h5>
+    <p class="text-grey v-spacing-2">Please try another search</p>
+</div>
+                        </div>
+                        <div class="v-spacing-6">
+                        </div>
+                </main>
+            </div>
+    </div>
+<footer class="bw-footer padding-7 v-spacing-top-6">
+  <div class="center">
+    <div class="footer-logo-container">
+        <div class="row">
+            <div class="col-sm-8">
+                <a href="https://www.upf.edu/web/mtg" class="no-hover">
+                    <img class="w-100" src="/static/bw-frontend/public/upf_logo.06e9f326ce68.png" />
+                </a>
+            </div>
+            <div class="col-sm-4">
+                <a href="https://www.upf.edu/web/phonos/" class="no-hover">
+                    <img class="w-100" src="/static/bw-frontend/public/phonos_logo.7c586cfd83d2.png" />
+                </a>
+            </div>
+        </div>
+    </div>
+  </div>
+  <div class="row v-spacing-top-3 center">
+    <a class="bw-link--grey h-spacing-1" href="/help/faq/#about-freesound">About Freesound</a>
+    <a class="bw-link--grey h-spacing-1" href="/help/tos_web/">Terms of use</a>
+    <a class="bw-link--grey h-spacing-1" href="/help/privacy/">Privacy</a>
+    <a class="bw-link--grey h-spacing-1" href="/help/cookies_policy/">Cookies</a>
+    <a class="bw-link--grey h-spacing-1" href="/help/developers/">Developers</a>
+    <a class="bw-link--grey h-spacing-1" href="/help/faq/">Help</a>
+    <a class="bw-link--grey h-spacing-1" href="/donations/donors/">Donations</a>
+    <a class="bw-link--grey h-spacing-1" href="https://blog.freesound.org">Blog</a>
+    <a class="bw-link--grey h-spacing-1" href="https://labs.freesound.org">Freesound Labs</a>
+    <a class="bw-link--grey h-spacing-1" href="/help/tshirt/">Get your t-shirt!</a>
+  </div>
+  <div class="center v-spacing-top-3">
+    <span>© 2026 Universitat Pompeu Fabra</span>
+  </div>
+</footer>
+    </div>
+<link href='https://api.tiles.mapbox.com/mapbox-gl-js/v2.6.1/mapbox-gl.css' rel='stylesheet' />
+<link rel='stylesheet' href='https://api.mapbox.com/mapbox-gl-js/plugins/mapbox-gl-geocoder/v4.7.2/mapbox-gl-geocoder.css' type='text/css' />
+</body>
+</html>

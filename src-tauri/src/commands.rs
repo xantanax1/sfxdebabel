@@ -130,7 +130,7 @@ pub struct AppState {
 impl AppState {
     pub fn new(data_dir: &Path) -> Result<Self, AppError> {
         let http = reqwest::Client::builder()
-            .user_agent("SFX-de-Babel/0.1 (Mozilla/5.0)")
+            .user_agent(crate::providers::http::user_agent())
             .timeout(Duration::from_secs(16))
             .connect_timeout(Duration::from_secs(8))
             .build()?;
@@ -340,18 +340,16 @@ pub async fn search_sfx(
                         page_result = res;
                         provider_used = fsw.name().to_string();
                     }
-                    Err(err) => {
-                        let msg = err.to_string();
-                        if msg.contains("429") {
-                            return Ok(SearchResponse {
-                                items: Vec::new(),
-                                provider_used: fsw.name().to_string(),
-                                warning: Some(msg),
-                                next_cursor: Some(format!("fs_web:{n}")),
-                            });
-                        }
-                        return Err(msg);
+                    Err(err @ AppError::RateLimited { .. }) => {
+                        // Keep the cursor so the Retry button re-requests the same page.
+                        return Ok(SearchResponse {
+                            items: Vec::new(),
+                            provider_used: fsw.name().to_string(),
+                            warning: Some(err.to_string()),
+                            next_cursor: Some(format!("fs_web:{n}")),
+                        });
                     }
+                    Err(err) => return Err(err.to_string()),
                 }
             }
         }
@@ -405,22 +403,26 @@ pub async fn search_sfx(
                                 "Freesound API недоступен ({msg}). Использован резервный источник."
                             ));
                             let mk = MixkitProvider::new();
-                            let mk_res = mk
-                                .search(&state.http, &search_params)
-                                .await
-                                .map_err(String::from)?;
-                            if !mk_res.candidates.is_empty() {
-                                page_result = mk_res;
-                                provider_used = mk.name().to_string();
-                                resolved_cursor = SearchCursor::Mixkit(1);
-                            } else {
-                                let fsw = FreesoundWebProvider::new();
-                                page_result = fsw
-                                    .search(&state.http, &search_params)
-                                    .await
-                                    .map_err(String::from)?;
-                                provider_used = fsw.name().to_string();
-                                resolved_cursor = SearchCursor::FsWeb(1);
+                            match mk.search(&state.http, &search_params).await {
+                                Ok(mk_res) if !mk_res.candidates.is_empty() => {
+                                    page_result = mk_res;
+                                    provider_used = mk.name().to_string();
+                                    resolved_cursor = SearchCursor::Mixkit(1);
+                                }
+                                mk_outcome => {
+                                    if let Err(e @ AppError::ProviderLayoutChanged { .. }) =
+                                        mk_outcome
+                                    {
+                                        warning = Some(e.to_string());
+                                    }
+                                    let fsw = FreesoundWebProvider::new();
+                                    page_result = fsw
+                                        .search(&state.http, &search_params)
+                                        .await
+                                        .map_err(String::from)?;
+                                    provider_used = fsw.name().to_string();
+                                    resolved_cursor = SearchCursor::FsWeb(1);
+                                }
                             }
                         }
                     }
@@ -433,7 +435,11 @@ pub async fn search_sfx(
                             provider_used = mk.name().to_string();
                             resolved_cursor = SearchCursor::Mixkit(1);
                         }
-                        _ => {
+                        other => {
+                            // Mixkit's markup changed: keep going with Freesound Web but tell the user.
+                            if let Err(e @ AppError::ProviderLayoutChanged { .. }) = other {
+                                warning = Some(e.to_string());
+                            }
                             let fsw = FreesoundWebProvider::new();
                             page_result = fsw
                                 .search(&state.http, &search_params)

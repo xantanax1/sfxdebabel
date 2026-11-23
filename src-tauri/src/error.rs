@@ -31,6 +31,18 @@ pub enum AppError {
 
     #[error("Не задан API-ключ Freesound")]
     MissingApiKey,
+
+    /// The page loaded but the markup no longer matches what the parser expects.
+    /// The `PROVIDER_LAYOUT_CHANGED|provider|detail` prefix is parsed by the UI to show a localized message.
+    #[error("PROVIDER_LAYOUT_CHANGED|{provider}|{detail}")]
+    ProviderLayoutChanged { provider: String, detail: String },
+
+    /// HTTP 429 persisted after all retries. Parsed by the UI (`RATE_LIMITED|provider|retry_after_secs`).
+    #[error("RATE_LIMITED|{provider}|{}", .retry_after_secs.map(|s| s.to_string()).unwrap_or_default())]
+    RateLimited {
+        provider: String,
+        retry_after_secs: Option<u64>,
+    },
 }
 
 impl From<AppError> for String {

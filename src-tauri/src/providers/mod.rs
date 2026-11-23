@@ -1,5 +1,6 @@
 pub mod freesound;
 pub mod freesound_web;
+pub mod http;
 pub mod mixkit;
 
 use std::collections::HashSet;

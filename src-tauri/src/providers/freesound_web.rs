@@ -5,6 +5,7 @@ use scraper::{Html, Selector};
 
 use crate::error::AppError;
 use crate::license::LicenseInfo;
+use crate::providers::http::{freesound_web_gate, send_with_retry};
 use crate::providers::{ProviderPage, ProviderSearchParams, RawSfxCandidate, SfxProvider};
 
 /// Keyless public web search provider for Freesound.org.
@@ -92,6 +93,36 @@ pub fn parse_freesound_web_html(html: &str) -> (Vec<RawSfxCandidate>, bool) {
     (results, has_next)
 }
 
+/// Like [`parse_freesound_web_html`], but tells "genuinely empty" apart from "markup changed".
+pub fn parse_freesound_web_checked(
+    html: &str,
+) -> Result<(Vec<RawSfxCandidate>, bool), AppError> {
+    let (items, has_next) = parse_freesound_web_html(html);
+    if !items.is_empty() {
+        return Ok((items, has_next));
+    }
+
+    let layout_err = |detail: &str| AppError::ProviderLayoutChanged {
+        provider: "Freesound".to_string(),
+        detail: detail.to_string(),
+    };
+
+    let document = Html::parse_document(html);
+    let player_sel = Selector::parse(".bw-player").expect("valid bw-player selector");
+    if document.select(&player_sel).next().is_some() {
+        return Err(layout_err(
+            ".bw-player found but data-sound-id / data-ogg / data-mp3 attributes are missing",
+        ));
+    }
+    // Freesound renders an explicit "No results" notice for empty searches.
+    if html.contains("No results") {
+        return Ok((Vec::new(), false));
+    }
+    Err(layout_err(
+        "no .bw-player elements and no 'No results' marker on the search page",
+    ))
+}
+
 #[async_trait]
 impl SfxProvider for FreesoundWebProvider {
     fn name(&self) -> &'static str {
@@ -113,28 +144,23 @@ impl SfxProvider for FreesoundWebProvider {
         let filter = format!("duration:[{min_d:.2} TO {max_d:.2}]");
         let page = params.page.max(1).to_string();
 
-        let resp = client
-            .get("https://freesound.org/search/")
-            .header(
-                "Accept",
-                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            )
-            .header("Accept-Language", "en-US,en;q=0.9")
-            .query(&[
-                ("q", query),
-                ("f", filter.as_str()),
-                ("page", page.as_str()),
-            ])
-            .send()
-            .await?;
+        let resp = send_with_retry("Freesound", Some(freesound_web_gate()), || {
+            client
+                .get("https://freesound.org/search/")
+                .header(
+                    "Accept",
+                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                )
+                .header("Accept-Language", "en-US,en;q=0.9")
+                .query(&[
+                    ("q", query),
+                    ("f", filter.as_str()),
+                    ("page", page.as_str()),
+                ])
+        })
+        .await?;
 
         let status = resp.status();
-        if status.as_u16() == 429 {
-            return Err(AppError::Provider(
-                "Freesound временно ограничил частоту запросов (HTTP 429). Подождите пару секунд и прокрутите снова."
-                    .to_string(),
-            ));
-        }
         if !status.is_success() {
             return Err(AppError::Provider(format!(
                 "Freesound Web вернул статус {status}"
@@ -142,7 +168,7 @@ impl SfxProvider for FreesoundWebProvider {
         }
 
         let html = resp.text().await?;
-        let (mut candidates, has_next) = parse_freesound_web_html(&html);
+        let (mut candidates, has_next) = parse_freesound_web_checked(&html)?;
         candidates.truncate(params.page_size.max(1));
 
         Ok(ProviderPage {
@@ -188,5 +214,46 @@ mod tests {
             "https://cdn.freesound.org/previews/25/25071_92661-lq.ogg"
         );
         assert_eq!(items[0].approx_duration, Some(4.65067));
+    }
+
+    const FIXTURE_OK: &str = include_str!("../../tests/fixtures/freesound_web_whoosh.html");
+    const FIXTURE_EMPTY: &str =
+        include_str!("../../tests/fixtures/freesound_web_no_results.html");
+
+    #[test]
+    fn fixture_real_page_parses_players_and_next_page() {
+        let (items, has_next) = parse_freesound_web_checked(FIXTURE_OK).expect("should parse");
+        assert!(items.len() >= 10, "got {}", items.len());
+        assert!(has_next, "fixture page 1 has a Next Page link");
+        for it in &items {
+            assert!(it.id.starts_with("fsw_"));
+            assert!(it.preview_url.starts_with("http"));
+            // The listing exposes no license: it must stay `unknown`, never guessed.
+            assert_eq!(it.license.id, "unknown");
+            assert_eq!(it.license.commercial_use_allowed, None);
+        }
+    }
+
+    #[test]
+    fn fixture_no_results_page_is_empty_not_error() {
+        let (items, has_next) =
+            parse_freesound_web_checked(FIXTURE_EMPTY).expect("empty is not an error");
+        assert!(items.is_empty());
+        assert!(!has_next);
+    }
+
+    #[test]
+    fn renamed_player_class_raises_layout_changed() {
+        let broken = FIXTURE_OK.replace("bw-player", "sound-player");
+        let err = parse_freesound_web_checked(&broken).unwrap_err();
+        assert!(matches!(err, AppError::ProviderLayoutChanged { .. }), "{err:?}");
+        assert!(err.to_string().starts_with("PROVIDER_LAYOUT_CHANGED|Freesound|"));
+    }
+
+    #[test]
+    fn renamed_data_attributes_raise_layout_changed() {
+        let broken = FIXTURE_OK.replace("data-sound-id", "data-snd");
+        let err = parse_freesound_web_checked(&broken).unwrap_err();
+        assert!(matches!(err, AppError::ProviderLayoutChanged { .. }), "{err:?}");
     }
 }

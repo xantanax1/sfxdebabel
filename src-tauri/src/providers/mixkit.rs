@@ -5,6 +5,7 @@ use scraper::{Html, Selector};
 
 use crate::error::AppError;
 use crate::license::LicenseInfo;
+use crate::providers::http::{mixkit_gate, send_with_retry};
 use crate::providers::{ProviderPage, ProviderSearchParams, RawSfxCandidate, SfxProvider};
 
 #[derive(Default)]
@@ -16,15 +17,16 @@ impl MixkitProvider {
     }
 
     async fn fetch_html(&self, client: &reqwest::Client, url: &str) -> Result<String, AppError> {
-        let resp = client
-            .get(url)
-            .header(
-                "Accept",
-                "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-            )
-            .header("Accept-Language", "en-US,en;q=0.9")
-            .send()
-            .await?;
+        let resp = send_with_retry("Mixkit", Some(mixkit_gate()), || {
+            client
+                .get(url)
+                .header(
+                    "Accept",
+                    "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                )
+                .header("Accept-Language", "en-US,en;q=0.9")
+        })
+        .await?;
 
         if !resp.status().is_success() {
             return Err(AppError::Provider(format!(
@@ -33,6 +35,32 @@ impl MixkitProvider {
             )));
         }
         Ok(resp.text().await?)
+    }
+}
+
+impl MixkitProvider {
+    /// Fetches and parses one page. Plain HTTP failures (404, 5xx, network) count as "no
+    /// results here" so the fallback chain can continue; rate limiting aborts immediately and
+    /// layout changes are remembered in `layout_err`.
+    async fn fetch_and_parse(
+        &self,
+        client: &reqwest::Client,
+        url: &str,
+        layout_err: &mut Option<AppError>,
+    ) -> Result<(Vec<RawSfxCandidate>, bool), AppError> {
+        let html = match self.fetch_html(client, url).await {
+            Ok(h) => h,
+            Err(e @ AppError::RateLimited { .. }) => return Err(e),
+            Err(_) => return Ok((Vec::new(), false)),
+        };
+        match parse_mixkit_checked(&html) {
+            Ok(page) => Ok(page),
+            Err(e @ AppError::ProviderLayoutChanged { .. }) => {
+                layout_err.get_or_insert(e);
+                Ok((Vec::new(), false))
+            }
+            Err(e) => Err(e),
+        }
     }
 }
 
@@ -166,9 +194,41 @@ pub fn parse_mixkit_page(html: &str) -> (Vec<RawSfxCandidate>, bool) {
     (results, has_next)
 }
 
-#[allow(dead_code)]
-pub fn parse_mixkit_html(html: &str) -> Vec<RawSfxCandidate> {
-    parse_mixkit_page(html).0
+/// Like [`parse_mixkit_page`], but tells "genuinely empty" apart from "markup changed".
+///
+/// * cards found and parsed -> `Ok`
+/// * Mixkit's explicit "No results found" page -> `Ok(empty)`
+/// * anything else that yields nothing -> [`AppError::ProviderLayoutChanged`]
+pub fn parse_mixkit_checked(html: &str) -> Result<(Vec<RawSfxCandidate>, bool), AppError> {
+    let (items, has_next) = parse_mixkit_page(html);
+    if !items.is_empty() {
+        return Ok((items, has_next));
+    }
+
+    let layout_err = |detail: &str| AppError::ProviderLayoutChanged {
+        provider: "Mixkit".to_string(),
+        detail: detail.to_string(),
+    };
+
+    if html.contains("No results found") {
+        return Ok((Vec::new(), false));
+    }
+
+    let document = Html::parse_document(html);
+    let card_sel = Selector::parse(".item-grid__item").expect("valid item selector");
+    let container_sel = Selector::parse(".item-grid__items").expect("valid container selector");
+    if document.select(&card_sel).next().is_some() {
+        return Err(layout_err(
+            "cards found but audio-player preview attributes are missing",
+        ));
+    }
+    if document.select(&container_sel).next().is_some() {
+        // Grid container present and truly empty: treat as an empty result.
+        return Ok((Vec::new(), false));
+    }
+    Err(layout_err(
+        "expected .item-grid__items / .item-grid__item not found and no 'No results found' marker",
+    ))
 }
 
 fn score_token_relevance(candidate: &RawSfxCandidate, tokens: &[String]) -> usize {
@@ -200,10 +260,13 @@ impl SfxProvider for MixkitProvider {
         let page = params.page.max(1);
         let tokens = tokenize_query(&params.query);
 
+        // A layout error is only reported when no fallback URL produced results.
+        let mut layout_err: Option<AppError> = None;
+
         let (mut candidates, has_next) = if tokens.is_empty() {
             let url = append_page_param("https://mixkit.co/free-sound-effects/", page);
             let html = self.fetch_html(client, &url).await?;
-            parse_mixkit_page(&html)
+            parse_mixkit_checked(&html)?
         } else {
             let slug = tokens.join("-");
             let discover_base = format!(
@@ -211,10 +274,9 @@ impl SfxProvider for MixkitProvider {
                 urlencoding::encode(&slug)
             );
             let discover_url = append_page_param(&discover_base, page);
-            let (mut found, mut next) = match self.fetch_html(client, &discover_url).await {
-                Ok(html) => parse_mixkit_page(&html),
-                Err(_) => (Vec::new(), false),
-            };
+            let (mut found, mut next) = self
+                .fetch_and_parse(client, &discover_url, &mut layout_err)
+                .await?;
 
             if found.is_empty() {
                 let category_base = format!(
@@ -222,9 +284,9 @@ impl SfxProvider for MixkitProvider {
                     urlencoding::encode(&slug)
                 );
                 let category_url = append_page_param(&category_base, page);
-                if let Ok(html) = self.fetch_html(client, &category_url).await {
-                    (found, next) = parse_mixkit_page(&html);
-                }
+                (found, next) = self
+                    .fetch_and_parse(client, &category_url, &mut layout_err)
+                    .await?;
             }
 
             if found.is_empty() && tokens.len() > 1 {
@@ -236,14 +298,19 @@ impl SfxProvider for MixkitProvider {
                         urlencoding::encode(&tok)
                     );
                     let url = append_page_param(&base, page);
-                    if let Ok(html) = self.fetch_html(client, &url).await {
-                        let (parsed, parsed_next) = parse_mixkit_page(&html);
-                        if !parsed.is_empty() {
-                            found = parsed;
-                            next = parsed_next;
-                            break;
-                        }
+                    let (parsed, parsed_next) =
+                        self.fetch_and_parse(client, &url, &mut layout_err).await?;
+                    if !parsed.is_empty() {
+                        found = parsed;
+                        next = parsed_next;
+                        break;
                     }
+                }
+            }
+
+            if found.is_empty() {
+                if let Some(err) = layout_err.take() {
+                    return Err(err);
                 }
             }
 
@@ -349,5 +416,48 @@ mod tests {
         );
         assert_eq!(parsed[0].approx_duration, Some(2.0));
         assert_eq!(parsed[0].tags, vec!["Woosh", "Whoosh"]);
+    }
+
+    const FIXTURE_OK: &str = include_str!("../../tests/fixtures/mixkit_whoosh.html");
+    const FIXTURE_EMPTY: &str = include_str!("../../tests/fixtures/mixkit_no_results.html");
+
+    #[test]
+    fn fixture_real_page_parses_cards_with_license() {
+        let (items, _) = parse_mixkit_checked(FIXTURE_OK).expect("fixture should parse");
+        assert!(items.len() >= 10, "got {}", items.len());
+        for it in &items {
+            assert!(it.id.starts_with("mk_"));
+            assert!(it.preview_url.starts_with("https://"));
+            assert!(!it.title.is_empty());
+            assert_eq!(it.license.id, "mixkit-sfx-free");
+            assert!(it.approx_duration.is_some(), "duration missing for {}", it.title);
+        }
+    }
+
+    #[test]
+    fn fixture_no_results_page_is_empty_not_error() {
+        let (items, has_next) = parse_mixkit_checked(FIXTURE_EMPTY).expect("empty is not an error");
+        assert!(items.is_empty());
+        assert!(!has_next);
+    }
+
+    #[test]
+    fn renamed_selectors_raise_layout_changed() {
+        let broken = FIXTURE_OK
+            .replace("item-grid__item", "grid-entry")
+            .replace("item-grid__items", "grid-entries");
+        let err = parse_mixkit_checked(&broken).unwrap_err();
+        assert!(matches!(err, AppError::ProviderLayoutChanged { .. }), "{err:?}");
+        assert!(err.to_string().starts_with("PROVIDER_LAYOUT_CHANGED|Mixkit|"));
+    }
+
+    #[test]
+    fn renamed_player_attributes_raise_layout_changed() {
+        let broken = FIXTURE_OK.replace(
+            "data-audio-player-preview-url-value",
+            "data-audio-preview",
+        );
+        let err = parse_mixkit_checked(&broken).unwrap_err();
+        assert!(matches!(err, AppError::ProviderLayoutChanged { .. }), "{err:?}");
     }
 }

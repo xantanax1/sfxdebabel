@@ -5,6 +5,7 @@ use serde::Deserialize;
 
 use crate::error::AppError;
 use crate::license::LicenseInfo;
+use crate::providers::http::send_with_retry;
 use crate::providers::{ProviderPage, ProviderSearchParams, RawSfxCandidate, SfxProvider};
 
 pub struct FreesoundProvider {
@@ -80,21 +81,22 @@ impl SfxProvider for FreesoundProvider {
         let page_size = params.page_size.clamp(1, 50).to_string();
         let page = params.page.max(1).to_string();
 
-        let resp = client
-            .get("https://freesound.org/apiv2/search/text/")
-            .header("Authorization", format!("Token {key}"))
-            .query(&[
-                ("query", params.query.trim()),
-                ("filter", duration_filter.as_str()),
-                (
-                    "fields",
-                    "id,name,duration,username,license,previews,tags,url",
-                ),
-                ("page", page.as_str()),
-                ("page_size", page_size.as_str()),
-            ])
-            .send()
-            .await?;
+        let resp = send_with_retry("Freesound", None, || {
+            client
+                .get("https://freesound.org/apiv2/search/text/")
+                .header("Authorization", format!("Token {key}"))
+                .query(&[
+                    ("query", params.query.trim()),
+                    ("filter", duration_filter.as_str()),
+                    (
+                        "fields",
+                        "id,name,duration,username,license,previews,tags,url",
+                    ),
+                    ("page", page.as_str()),
+                    ("page_size", page_size.as_str()),
+                ])
+        })
+        .await?;
 
         let status = resp.status();
         if status.as_u16() == 401 || status.as_u16() == 403 {
