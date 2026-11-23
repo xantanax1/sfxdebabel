@@ -863,15 +863,17 @@ pub async fn play_sfx(
     start_secs: Option<f32>,
     volume: Option<f32>,
 ) -> Result<PlaybackStatus, String> {
+    let gen = state.player.begin_request();
     let audio = state
         .ensure_decoded(&sound_id, &preview_url)
         .await
         .map_err(String::from)?;
 
-    state
+    let status = state
         .player
-        .play(sound_id, &audio, start_secs, volume)
-        .map_err(String::from)
+        .play_if_current(gen, sound_id, &audio, start_secs, volume)
+        .map_err(String::from)?;
+    Ok(status.unwrap_or_else(|| state.player.get_status()))
 }
 
 #[tauri::command]
@@ -882,10 +884,14 @@ pub async fn preview_sfx_with_fx(
     start_secs: Option<f32>,
     volume: Option<f32>,
 ) -> Result<Vec<f32>, String> {
+    let gen = state.player.begin_request();
     let (original, _) = state
         .resolve_audio_and_title(&sound_id)
         .await
         .map_err(String::from)?;
+    if !state.player.is_current(gen) {
+        return Ok(Vec::new());
+    }
 
     let (processed, envelope) = tokio::task::spawn_blocking(move || {
         let raw_buf = AudioBuffer::from_decoded(&original);
@@ -897,10 +903,17 @@ pub async fn preview_sfx_with_fx(
     .await
     .map_err(|e| format!("Ошибка потока DSP: {e}"))?;
 
-    state
+    if !state.player.is_current(gen) {
+        return Ok(Vec::new());
+    }
+
+    let played = state
         .player
-        .play(sound_id, &processed, start_secs, volume)
+        .play_if_current(gen, sound_id, &processed, start_secs, volume)
         .map_err(String::from)?;
+    if played.is_none() {
+        return Ok(Vec::new());
+    }
 
     Ok(envelope)
 }

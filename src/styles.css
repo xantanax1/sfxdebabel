@@ -1174,6 +1174,7 @@ input::placeholder {
 .play-btn svg {
   width: 14px;
   height: 14px;
+  pointer-events: none;
 }
 
 .sfx-info {

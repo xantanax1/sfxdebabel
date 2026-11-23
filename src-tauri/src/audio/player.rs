@@ -1,3 +1,4 @@
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
 use std::time::Instant;
 
@@ -10,6 +11,7 @@ use crate::models::PlaybackStatus;
 
 enum PlayerCommand {
     Play {
+        gen: u64,
         sound_id: String,
         samples: Vec<f32>,
         channels: u16,
@@ -17,7 +19,7 @@ enum PlayerCommand {
         start_secs: f32,
         total_duration_secs: f32,
         volume: Option<f32>,
-        reply: mpsc::Sender<Result<(), AppError>>,
+        reply: mpsc::Sender<Result<bool, AppError>>,
     },
     Stop,
     SetVolume(f32),
@@ -48,6 +50,7 @@ impl Default for PlaybackTracker {
 pub struct AudioPlayer {
     tx: Mutex<mpsc::Sender<PlayerCommand>>,
     tracker: Arc<Mutex<PlaybackTracker>>,
+    generation: Arc<AtomicU64>,
 }
 
 impl AudioPlayer {
@@ -55,6 +58,8 @@ impl AudioPlayer {
         let (tx, rx) = mpsc::channel::<PlayerCommand>();
         let tracker = Arc::new(Mutex::new(PlaybackTracker::default()));
         let tracker_thread = Arc::clone(&tracker);
+        let generation = Arc::new(AtomicU64::new(0));
+        let generation_thread = Arc::clone(&generation);
 
         std::thread::Builder::new()
             .name("sfx-audio-player".to_string())
@@ -66,6 +71,7 @@ impl AudioPlayer {
                 while let Ok(cmd) = rx.recv() {
                     match cmd {
                         PlayerCommand::Play {
+                            gen,
                             sound_id,
                             samples,
                             channels,
@@ -77,6 +83,14 @@ impl AudioPlayer {
                         } => {
                             if let Some(v) = req_vol {
                                 volume = v.clamp(0.0, 1.0);
+                            }
+
+                            if gen != generation_thread.load(Ordering::SeqCst) {
+                                if let Some(sink) = current_sink.take() {
+                                    sink.stop();
+                                }
+                                let _ = reply.send(Ok(false));
+                                continue;
                             }
 
                             if stream_pair.is_none() {
@@ -91,38 +105,43 @@ impl AudioPlayer {
                                     if let Some(sink) = current_sink.take() {
                                         sink.stop();
                                     }
-                                    match Sink::try_new(handle) {
-                                        Ok(sink) => {
-                                            sink.set_volume(volume);
-                                            let ch = channels.max(1) as usize;
-                                            let total_frames = samples.len() / ch;
-                                            let start_frame = ((start_secs.max(0.0)
-                                                * sample_rate as f32)
-                                                as usize)
-                                                .min(total_frames);
-                                            let start_idx = start_frame * ch;
-                                            let slice = samples[start_idx..].to_vec();
-                                            let source = SamplesBuffer::new(
-                                                channels.max(1),
-                                                sample_rate.max(1),
-                                                slice,
-                                            );
-                                            sink.append(source);
-                                            sink.play();
-                                            current_sink = Some(sink);
+                                    if gen != generation_thread.load(Ordering::SeqCst) {
+                                        Ok(false)
+                                    } else {
+                                        match Sink::try_new(handle) {
+                                            Ok(sink) => {
+                                                sink.set_volume(volume);
+                                                let ch = channels.max(1) as usize;
+                                                let total_frames = samples.len() / ch;
+                                                let start_frame = ((start_secs.max(0.0)
+                                                    * sample_rate as f32)
+                                                    as usize)
+                                                    .min(total_frames);
+                                                let start_idx = start_frame * ch;
+                                                let slice = samples[start_idx..].to_vec();
+                                                let source = SamplesBuffer::new(
+                                                    channels.max(1),
+                                                    sample_rate.max(1),
+                                                    slice,
+                                                );
+                                                sink.append(source);
+                                                sink.play();
+                                                current_sink = Some(sink);
 
-                                            if let Ok(mut guard) = tracker_thread.lock() {
-                                                guard.sound_id = Some(sound_id);
-                                                guard.started_at = Some(Instant::now());
-                                                guard.offset_secs = start_secs.max(0.0);
-                                                guard.duration_secs = total_duration_secs.max(0.01);
-                                                guard.is_playing = true;
+                                                if let Ok(mut guard) = tracker_thread.lock() {
+                                                    guard.sound_id = Some(sound_id);
+                                                    guard.started_at = Some(Instant::now());
+                                                    guard.offset_secs = start_secs.max(0.0);
+                                                    guard.duration_secs =
+                                                        total_duration_secs.max(0.01);
+                                                    guard.is_playing = true;
+                                                }
+                                                Ok(true)
                                             }
-                                            Ok(())
+                                            Err(e) => Err(AppError::AudioPlayback(format!(
+                                                "Не удалось создать Sink: {e}"
+                                            ))),
                                         }
-                                        Err(e) => Err(AppError::AudioPlayback(format!(
-                                            "Не удалось создать Sink: {e}"
-                                        ))),
                                     }
                                 }
                             };
@@ -152,22 +171,46 @@ impl AudioPlayer {
         Self {
             tx: Mutex::new(tx),
             tracker,
+            generation,
         }
     }
 
-    pub fn play(
+    /// Starts a new playback request, immediately stopping any active sound and invalidating
+    /// earlier async playback tasks that have not started playing yet.
+    pub fn begin_request(&self) -> u64 {
+        let gen = self.generation.fetch_add(1, Ordering::SeqCst) + 1;
+        if let Ok(mut guard) = self.tracker.lock() {
+            guard.is_playing = false;
+            guard.started_at = None;
+        }
+        if let Ok(tx) = self.tx.lock() {
+            let _ = tx.send(PlayerCommand::Stop);
+        }
+        gen
+    }
+
+    pub fn is_current(&self, gen: u64) -> bool {
+        self.generation.load(Ordering::SeqCst) == gen
+    }
+
+    pub fn play_if_current(
         &self,
+        gen: u64,
         sound_id: String,
         audio: &DecodedAudio,
         start_secs: Option<f32>,
         volume: Option<f32>,
-    ) -> Result<PlaybackStatus, AppError> {
+    ) -> Result<Option<PlaybackStatus>, AppError> {
+        if !self.is_current(gen) {
+            return Ok(None);
+        }
         let clamped_start = start_secs
             .unwrap_or(0.0)
             .clamp(0.0, (audio.duration_secs - 0.02).max(0.0));
         let (reply_tx, reply_rx) = mpsc::channel();
 
         let cmd = PlayerCommand::Play {
+            gen,
             sound_id,
             samples: audio.interleaved_samples.clone(),
             channels: audio.channels,
@@ -184,14 +227,36 @@ impl AudioPlayer {
             .send(cmd)
             .map_err(|_| AppError::AudioPlayback("Аудиопоток остановлен".to_string()))?;
 
-        reply_rx
+        let played = reply_rx
             .recv()
             .map_err(|_| AppError::AudioPlayback("Нет ответа от аудиопотока".to_string()))??;
 
-        Ok(self.get_status())
+        if played {
+            Ok(Some(self.get_status()))
+        } else {
+            Ok(None)
+        }
+    }
+
+    #[allow(dead_code)]
+    pub fn play(
+        &self,
+        sound_id: String,
+        audio: &DecodedAudio,
+        start_secs: Option<f32>,
+        volume: Option<f32>,
+    ) -> Result<PlaybackStatus, AppError> {
+        let gen = self.begin_request();
+        let status = self.play_if_current(gen, sound_id, audio, start_secs, volume)?;
+        Ok(status.unwrap_or_else(|| self.get_status()))
     }
 
     pub fn stop(&self) -> Result<(), AppError> {
+        self.generation.fetch_add(1, Ordering::SeqCst);
+        if let Ok(mut guard) = self.tracker.lock() {
+            guard.is_playing = false;
+            guard.started_at = None;
+        }
         self.tx
             .lock()
             .map_err(|_| AppError::AudioPlayback("Ошибка блокировки плеера".to_string()))?
@@ -255,5 +320,44 @@ impl AudioPlayer {
 impl Default for AudioPlayer {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn dummy_audio() -> DecodedAudio {
+        DecodedAudio {
+            mono_samples: vec![0.0; 1024],
+            interleaved_samples: vec![0.0; 1024],
+            sample_rate: 44_100,
+            channels: 1,
+            duration_secs: 1024.0 / 44_100.0,
+        }
+    }
+
+    #[test]
+    fn stop_and_new_request_invalidate_stale_generation() {
+        let player = AudioPlayer::new();
+        let g1 = player.begin_request();
+        assert!(player.is_current(g1));
+
+        let g2 = player.begin_request();
+        assert!(!player.is_current(g1));
+        assert!(player.is_current(g2));
+
+        let stale = player
+            .play_if_current(g1, "old".to_string(), &dummy_audio(), None, None)
+            .unwrap();
+        assert!(stale.is_none());
+
+        player.stop().unwrap();
+        assert!(!player.is_current(g2));
+        let stopped = player
+            .play_if_current(g2, "stopped".to_string(), &dummy_audio(), None, None)
+            .unwrap();
+        assert!(stopped.is_none());
+        assert!(!player.get_status().is_playing);
     }
 }

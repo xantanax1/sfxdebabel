@@ -175,6 +175,8 @@ let playback: PlaybackStatus = {
   durationSecs: 0,
 };
 let playbackSnapshotTimeMs = 0;
+let playbackReqToken = 0;
+let pendingPlaySoundId: string | null = null;
 let rafId: number | null = null;
 let lastSearchToken = 0;
 
@@ -1121,22 +1123,42 @@ async function getOrPrepareWav(item: SfxItem): Promise<string> {
   return promise;
 }
 
+async function stopPlaybackNow(): Promise<void> {
+  playbackReqToken += 1;
+  pendingPlaySoundId = null;
+  playback = { ...playback, isPlaying: false };
+  updatePlaybackUi();
+  renderEnvelopeCanvas();
+  try {
+    await invoke("stop_sfx");
+  } catch (err) {
+    showToast(t(currentLocale, "toast.stopErr", { err: String(err) }));
+  }
+}
+
 async function togglePlay(item: SfxItem, startSecs?: number): Promise<void> {
   if (selectedSoundId !== item.id) {
     selectSoundForFx(item.id);
   }
 
-  if (playback.isPlaying && playback.soundId === item.id && startSecs === undefined) {
-    try {
-      await invoke("stop_sfx");
-      playback = { ...playback, isPlaying: false };
-      updatePlaybackUi();
-      renderEnvelopeCanvas();
-    } catch (err) {
-      showToast(t(currentLocale, "toast.stopErr", { err: String(err) }));
-    }
+  const isSameActiveOrPending =
+    (playback.isPlaying && playback.soundId === item.id) ||
+    pendingPlaySoundId === item.id;
+  if (isSameActiveOrPending && startSecs === undefined) {
+    await stopPlaybackNow();
     return;
   }
+
+  const token = ++playbackReqToken;
+  pendingPlaySoundId = item.id;
+  playback = {
+    isPlaying: false,
+    soundId: item.id,
+    positionSecs: startSecs ?? 0,
+    durationSecs: item.duration,
+  };
+  updatePlaybackUi();
+  renderEnvelopeCanvas();
 
   try {
     const updatedEnv = await invoke<number[]>("preview_sfx_with_fx", {
@@ -1145,8 +1167,12 @@ async function togglePlay(item: SfxItem, startSecs?: number): Promise<void> {
       startSecs: startSecs ?? null,
       volume: Number(volumeSlider.value) / 100,
     });
-    const status = await invoke<PlaybackStatus>("get_playback_status");
+    if (token !== playbackReqToken || updatedEnv.length === 0) return;
 
+    const status = await invoke<PlaybackStatus>("get_playback_status");
+    if (token !== playbackReqToken) return;
+
+    pendingPlaySoundId = null;
     item.envelope = updatedEnv;
     if (status.durationSecs > 0) {
       item.duration = status.durationSecs;
@@ -1160,6 +1186,10 @@ async function togglePlay(item: SfxItem, startSecs?: number): Promise<void> {
     startPlaybackLoop();
     updatePlaybackUi();
   } catch (err) {
+    if (token !== playbackReqToken) return;
+    pendingPlaySoundId = null;
+    playback = { ...playback, isPlaying: false };
+    updatePlaybackUi();
     showToast(humanizeBackendMessage(String(err)));
   }
 }
@@ -1170,6 +1200,17 @@ function getInterpolatedPlaybackPos(): number {
   return Math.min(playback.durationSecs, playback.positionSecs + elapsed);
 }
 
+function drawActivePlaybackWaveform(): void {
+  const id = playback.soundId;
+  if (!id) return;
+  const canvas = cardWaveCanvases.get(id);
+  const item = currentItems.find((x) => x.id === id);
+  if (!canvas || !item) return;
+  const pos = getInterpolatedPlaybackPos();
+  const ratio = playback.durationSecs > 0 ? pos / playback.durationSecs : 0;
+  drawCardWaveform(canvas, item.envelope, ratio, true);
+}
+
 function updatePlaybackUi(): void {
   const cards = resultsList.querySelectorAll<HTMLElement>(".sfx-card");
   const pos = getInterpolatedPlaybackPos();
@@ -1177,7 +1218,7 @@ function updatePlaybackUi(): void {
   cards.forEach((card) => {
     const id = card.dataset.soundId ?? "";
     const isCurrent = playback.soundId === id;
-    const isActive = isCurrent && playback.isPlaying;
+    const isActive = (isCurrent && playback.isPlaying) || pendingPlaySoundId === id;
     card.classList.toggle("is-playing", isActive);
     card.classList.toggle("is-selected", selectedSoundId === id);
 
@@ -1188,9 +1229,13 @@ function updatePlaybackUi(): void {
 
     const playBtn = card.querySelector<HTMLButtonElement>(".play-btn");
     if (playBtn) {
-      playBtn.innerHTML = isActive
-        ? `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>`
-        : `<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="8,5 19,12 8,19"/></svg>`;
+      const nextState = isActive ? "1" : "0";
+      if (playBtn.dataset.playing !== nextState) {
+        playBtn.dataset.playing = nextState;
+        playBtn.innerHTML = isActive
+          ? `<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="6" width="12" height="12" rx="1.5"/></svg>`
+          : `<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="8,5 19,12 8,19"/></svg>`;
+      }
     }
 
     const canvas = cardWaveCanvases.get(id);
@@ -1220,7 +1265,7 @@ function startPlaybackLoop(): void {
       rafId = null;
       return;
     }
-    updatePlaybackUi();
+    drawActivePlaybackWaveform();
     rafId = requestAnimationFrame(tick);
   };
   rafId = requestAnimationFrame(tick);
@@ -1347,6 +1392,7 @@ function createSfxCardElement(item: SfxItem, staggerIndex?: number): HTMLElement
   const playBtn = document.createElement("button");
   playBtn.type = "button";
   playBtn.className = "play-btn";
+  playBtn.dataset.playing = "0";
   playBtn.title = t(currentLocale, "card.playTitle");
   playBtn.innerHTML = `<svg viewBox="0 0 24 24" fill="currentColor"><polygon points="8,5 19,12 8,19"/></svg>`;
   playBtn.addEventListener("click", (e) => {
@@ -2179,12 +2225,8 @@ window.addEventListener("keydown", (e) => {
     document.activeElement?.tagName !== "SELECT"
   ) {
     e.preventDefault();
-    if (playback.isPlaying) {
-      void invoke("stop_sfx").then(() => {
-        playback = { ...playback, isPlaying: false };
-        updatePlaybackUi();
-        renderEnvelopeCanvas();
-      });
+    if (playback.isPlaying || pendingPlaySoundId !== null) {
+      void stopPlaybackNow();
     } else if (currentItems.length > 0) {
       const target =
         currentItems.find((x) => x.id === (playback.soundId ?? selectedSoundId)) ??
