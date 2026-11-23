@@ -1088,13 +1088,13 @@ input::placeholder {
 /* Sound Result Row */
 .sfx-card {
   position: relative;
-  height: 56px;
+  min-height: 76px;
   flex-shrink: 0;
   display: grid;
-  grid-template-columns: 32px minmax(160px, 1.1fr) minmax(180px, 1.5fr) auto;
+  grid-template-columns: 32px minmax(200px, 1.25fr) minmax(160px, 1.25fr) auto;
   align-items: center;
   gap: 12px;
-  padding: 0 12px;
+  padding: 8px 12px;
   border-radius: var(--radius-row);
   background: var(--bg-card);
   border: 1px solid var(--hairline);
@@ -1371,7 +1371,7 @@ input::placeholder {
 }
 
 .skeleton-card {
-  height: 56px;
+  height: 76px;
   flex-shrink: 0;
   border-radius: var(--radius-row);
   background: rgba(255, 255, 255, 0.025);
